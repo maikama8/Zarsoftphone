@@ -1,8 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import {
-  Phone, PhoneOff, Mic, MicOff, Pause, Play,
-  Grid3x3, Delete, PhoneForwarded,
-} from 'lucide-react'
+import { Phone, PhoneOff, Mic, MicOff, Pause, Play, Grid3x3, Delete, PhoneForwarded } from 'lucide-react'
 import { useStore } from '../store'
 import { sipService } from '../services/sip/SipService'
 import clsx from 'clsx'
@@ -37,7 +34,8 @@ export default function Dialer() {
   const accounts = useStore((s) => s.accounts)
   const selectedAccountId = useStore((s) => s.selectedAccountId)
 
-  const [showDialpad, setShowDialpad] = useState(true)
+  // Only shown during an active call, lets user send DTMF
+  const [showDtmfPad, setShowDtmfPad] = useState(false)
 
   const activeAccount =
     accounts.find((a) => a.id === selectedAccountId && a.isEnabled) ||
@@ -48,8 +46,7 @@ export default function Dialer() {
   useEffect(() => {
     if (activeCall?.state === 'active' && activeCall.startTime) {
       const interval = setInterval(() => {
-        const duration = Math.floor((Date.now() - activeCall.startTime!) / 1000)
-        updateCallState({ duration })
+        updateCallState({ duration: Math.floor((Date.now() - activeCall.startTime!) / 1000) })
       }, 1000)
       return () => clearInterval(interval)
     }
@@ -65,14 +62,14 @@ export default function Dialer() {
 
   // Keyboard support
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return
       if ('0123456789*#'.includes(e.key)) handleDigit(e.key)
       if (e.key === 'Backspace') setDialNumber(dialNumber.slice(0, -1))
       if (e.key === 'Enter' && !activeCall && dialNumber) handleCall()
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [handleDigit, dialNumber, activeCall])
 
   const handleCall = async () => {
@@ -108,136 +105,112 @@ export default function Dialer() {
     })
     setActiveCall(null)
     setDialNumber('')
+    setShowDtmfPad(false)
   }
 
   const handleMute = async () => {
     if (!activeCall) return
-    if (activeCall.isMuted) {
-      await sipService.unmute()
-      updateCallState({ isMuted: false })
-    } else {
-      await sipService.mute()
-      updateCallState({ isMuted: true })
-    }
+    if (activeCall.isMuted) { await sipService.unmute(); updateCallState({ isMuted: false }) }
+    else                    { await sipService.mute();   updateCallState({ isMuted: true  }) }
   }
 
   const handleHold = async () => {
     if (!activeCall) return
-    if (activeCall.isHeld) {
-      await sipService.unhold()
-      updateCallState({ isHeld: false })
-    } else {
-      await sipService.hold()
-      updateCallState({ isHeld: true })
-    }
+    if (activeCall.isHeld) { await sipService.unhold(); updateCallState({ isHeld: false }) }
+    else                   { await sipService.hold();   updateCallState({ isHeld: true  }) }
   }
 
-  // ── Active call UI ──────────────────────────────────────────────────────────
+  // ── Active call ─────────────────────────────────────────────────────────────
   if (activeCall) {
     const name = activeCall.remoteName || activeCall.remoteNumber
     return (
-      <div className="flex flex-col flex-shrink-0">
-        {/* Caller info */}
-        <div className="flex items-center gap-2.5 px-3 py-2 border-b border-macos-separator"
-          style={{ background: 'rgba(28,28,30,0.6)' }}
+      <div className="flex flex-col h-full">
+        {/* Caller info row */}
+        <div
+          className="flex items-center gap-3 px-3 py-3 border-b border-macos-separator flex-shrink-0"
+          style={{ background: 'rgba(28,28,30,0.7)' }}
         >
           <div className="relative flex-shrink-0">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-macos-accent-blue to-blue-700 flex items-center justify-center">
-              <span className="text-sm font-semibold text-white">
-                {name.charAt(0).toUpperCase()}
-              </span>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-macos-accent-blue to-blue-700 flex items-center justify-center">
+              <span className="text-sm font-semibold text-white">{name.charAt(0).toUpperCase()}</span>
             </div>
             {activeCall.state === 'ringing' && (
               <div className="absolute inset-0 rounded-full bg-macos-accent-blue opacity-40 animate-pulse-ring" />
             )}
           </div>
-
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-macos-text-primary truncate">{name}</div>
-            <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold text-macos-text-primary truncate">{name}</div>
+            <div className="flex items-center gap-2 mt-0.5">
               {activeCall.state === 'connecting' && (
-                <span className="text-xs text-macos-text-tertiary animate-pulse">Connecting…</span>
+                <span className="text-xs text-macos-text-quaternary animate-pulse">Connecting…</span>
               )}
               {activeCall.state === 'ringing' && (
-                <span className="text-xs text-macos-text-tertiary animate-pulse">Ringing…</span>
+                <span className="text-xs text-macos-text-quaternary animate-pulse">Ringing…</span>
               )}
               {activeCall.state === 'active' && (
-                <span className="text-xs font-mono text-macos-accent-green">
-                  {formatDuration(activeCall.duration)}
-                </span>
-              )}
-              {activeCall.isHeld && (
-                <span className="text-[10px] text-macos-accent-yellow">HOLD</span>
-              )}
-              {/* Mini waveform */}
-              {activeCall.state === 'active' && !activeCall.isHeld && (
-                <div className="flex items-center gap-0.5">
-                  {[12, 18, 10, 16, 8].map((h, i) => (
-                    <div
-                      key={i}
-                      className="w-0.5 bg-macos-accent-blue rounded-full animate-pulse"
-                      style={{ height: h, animationDelay: `${i * 0.12}s` }}
-                    />
-                  ))}
-                </div>
+                <>
+                  <span className="text-xs font-mono text-macos-accent-green">
+                    {formatDuration(activeCall.duration)}
+                  </span>
+                  {activeCall.isHeld && (
+                    <span className="text-[10px] text-macos-accent-yellow">HOLD</span>
+                  )}
+                  {!activeCall.isHeld && (
+                    <div className="flex items-end gap-0.5">
+                      {[10, 16, 8, 14, 6].map((h, i) => (
+                        <div key={i} className="w-0.5 bg-macos-accent-blue rounded-full animate-pulse"
+                          style={{ height: h, animationDelay: `${i * 0.13}s` }} />
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-macos-separator gap-1"
+        {/* Call controls */}
+        <div
+          className="flex items-center gap-2 px-3 py-2 border-b border-macos-separator flex-shrink-0"
           style={{ background: 'rgba(28,28,30,0.4)' }}
         >
-          <CallCtrlBtn
-            onClick={handleMute}
-            active={activeCall.isMuted}
-            activeColor="bg-macos-accent-red"
-            title={activeCall.isMuted ? 'Unmute' : 'Mute'}
-          >
+          <CtrlBtn onClick={handleMute} active={activeCall.isMuted} activeColor="bg-macos-accent-red" title="Mute">
             {activeCall.isMuted ? <MicOff size={14} /> : <Mic size={14} />}
-          </CallCtrlBtn>
-
-          <CallCtrlBtn
-            onClick={handleHold}
-            active={activeCall.isHeld}
-            activeColor="bg-macos-accent-yellow"
-            title={activeCall.isHeld ? 'Resume' : 'Hold'}
-          >
+          </CtrlBtn>
+          <CtrlBtn onClick={handleHold} active={activeCall.isHeld} activeColor="bg-macos-accent-yellow" title="Hold">
             {activeCall.isHeld ? <Play size={14} /> : <Pause size={14} />}
-          </CallCtrlBtn>
-
-          <CallCtrlBtn onClick={() => setShowDialpad((v) => !v)} title="DTMF Pad">
+          </CtrlBtn>
+          <CtrlBtn onClick={() => setShowDtmfPad((v) => !v)} active={showDtmfPad} title="DTMF">
             <Grid3x3 size={14} />
-          </CallCtrlBtn>
-
-          <CallCtrlBtn onClick={() => {}} title="Transfer">
+          </CtrlBtn>
+          <CtrlBtn onClick={() => {}} title="Transfer">
             <PhoneForwarded size={14} />
-          </CallCtrlBtn>
-
-          {/* Hangup */}
+          </CtrlBtn>
+          {/* Hang up */}
           <button
             onClick={handleHangup}
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded bg-macos-accent-red hover:bg-opacity-90 text-white transition-all text-xs font-medium"
-            title="End call"
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded bg-macos-accent-red hover:bg-opacity-90 text-white text-xs font-medium transition-all"
           >
-            <PhoneOff size={13} />
-            End
+            <PhoneOff size={13} /> End
           </button>
         </div>
 
-        {/* DTMF pad (optional) */}
-        {showDialpad && <DialPad onDigit={handleDigit} compact />}
+        {/* DTMF pad or empty fill */}
+        {showDtmfPad
+          ? <DialPad onDigit={handleDigit} />
+          : <div className="flex-1" />
+        }
       </div>
     )
   }
 
-  // ── Idle dialer UI ──────────────────────────────────────────────────────────
+  // ── Idle dialer ──────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col flex-shrink-0">
+    <div className="flex flex-col h-full">
       {/* Number input */}
-      <div className="relative flex items-center px-3 py-0 border-b border-macos-separator"
-        style={{ background: 'rgba(28,28,30,0.4)', minHeight: 50 }}
+      <div
+        className="relative flex items-center px-3 border-b border-macos-separator flex-shrink-0"
+        style={{ minHeight: 52, background: 'rgba(28,28,30,0.5)' }}
       >
         <input
           type="text"
@@ -249,70 +222,56 @@ export default function Dialer() {
         {dialNumber && (
           <button
             onClick={() => setDialNumber(dialNumber.slice(0, -1))}
+            onDoubleClick={() => setDialNumber('')}
             className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-macos-text-quaternary hover:text-macos-text-secondary transition-colors"
+            title="Backspace (double-click to clear)"
           >
             <Delete size={14} />
           </button>
         )}
       </div>
 
-      {/* Dial controls row */}
-      <div className="flex items-center px-3 py-1.5 border-b border-macos-separator gap-1.5"
+      {/* Call button */}
+      <div
+        className="flex items-center px-3 py-2 border-b border-macos-separator gap-2 flex-shrink-0"
         style={{ background: 'rgba(28,28,30,0.3)' }}
       >
-        {/* Call button */}
         <button
           onClick={handleCall}
           disabled={!dialNumber || !activeAccount}
           className={clsx(
-            'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-all',
+            'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-semibold transition-all',
             dialNumber && activeAccount
               ? 'bg-macos-accent-green hover:bg-opacity-90 text-white'
               : 'bg-macos-bg-tertiary text-macos-text-quaternary cursor-not-allowed'
           )}
         >
-          <Phone size={13} />
-          Call
-        </button>
-
-        {/* Pad toggle */}
-        <button
-          onClick={() => setShowDialpad((v) => !v)}
-          className={clsx(
-            'p-1.5 rounded transition-colors text-macos-text-tertiary hover:text-macos-text-primary',
-            showDialpad ? 'bg-macos-bg-tertiary' : 'hover:bg-macos-bg-tertiary'
-          )}
-          title="Toggle dial pad"
-        >
-          <Grid3x3 size={14} />
+          <Phone size={13} /> Call
         </button>
       </div>
 
-      {/* Dialpad */}
-      {showDialpad && <DialPad onDigit={handleDigit} />}
+      {/* Dialpad — fills all remaining height */}
+      <DialPad onDigit={handleDigit} />
     </div>
   )
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Shared sub-components ────────────────────────────────────────────────────
 
-function DialPad({ onDigit, compact = false }: { onDigit: (d: string) => void; compact?: boolean }) {
+function DialPad({ onDigit }: { onDigit: (d: string) => void }) {
   return (
-    <div className={clsx(
-      'grid grid-cols-3 border-b border-macos-separator',
-      compact ? 'gap-px' : 'gap-px',
-    )}
-      style={{ background: 'rgba(28,28,30,0.2)' }}
+    <div className="flex-1 grid grid-cols-3 grid-rows-4 min-h-0"
+      style={{ background: 'rgba(28,28,30,0.15)' }}
     >
       {PAD_BUTTONS.map((btn) => (
         <button
           key={btn.digit}
           onClick={() => onDigit(btn.digit)}
-          className="flex flex-col items-center justify-center py-2.5 hover:bg-macos-bg-tertiary active:bg-macos-bg-secondary transition-colors"
+          className="flex flex-col items-center justify-center hover:bg-macos-bg-tertiary active:bg-macos-bg-secondary transition-colors border-r border-b border-macos-separator last:border-r-0"
         >
-          <span className="text-base font-light text-macos-text-primary leading-none">{btn.digit}</span>
+          <span className="text-lg font-light text-macos-text-primary leading-none">{btn.digit}</span>
           {btn.sub && (
-            <span className="text-[9px] text-macos-text-quaternary mt-0.5 leading-none">{btn.sub}</span>
+            <span className="text-[9px] text-macos-text-quaternary mt-0.5 leading-none tracking-wider">{btn.sub}</span>
           )}
         </button>
       ))}
@@ -320,12 +279,8 @@ function DialPad({ onDigit, compact = false }: { onDigit: (d: string) => void; c
   )
 }
 
-function CallCtrlBtn({
-  onClick,
-  children,
-  active = false,
-  activeColor = 'bg-macos-accent-blue',
-  title,
+function CtrlBtn({
+  onClick, children, active = false, activeColor = 'bg-macos-bg-tertiary', title,
 }: {
   onClick: () => void
   children: React.ReactNode
@@ -338,8 +293,10 @@ function CallCtrlBtn({
       onClick={onClick}
       title={title}
       className={clsx(
-        'p-1.5 rounded transition-all text-white',
-        active ? activeColor : 'bg-macos-bg-tertiary text-macos-text-secondary hover:text-macos-text-primary'
+        'p-1.5 rounded transition-all text-xs',
+        active
+          ? `${activeColor} text-white`
+          : 'bg-macos-bg-tertiary text-macos-text-secondary hover:text-macos-text-primary'
       )}
     >
       {children}

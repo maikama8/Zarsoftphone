@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Users, History, MessageSquare } from 'lucide-react'
 import { useStore } from './store'
 import { sipService } from './services/sip/SipService'
 import TitleBar from './components/TitleBar'
@@ -10,9 +11,9 @@ import AddAccountModal from './components/AddAccountModal'
 import CompactSettings from './components/CompactSettings'
 import clsx from 'clsx'
 
-type Tab = 'contacts' | 'history' | 'messages'
+type Panel = 'contacts' | 'history' | 'messages' | null
 
-function App() {
+export default function App() {
   const setAccounts = useStore((s) => s.setAccounts)
   const setContacts = useStore((s) => s.setContacts)
   const setCallHistory = useStore((s) => s.setCallHistory)
@@ -24,7 +25,8 @@ function App() {
   const showAddAccountModal = useStore((s) => s.showAddAccountModal)
   const showSettingsModal = useStore((s) => s.showSettingsModal)
 
-  const [tab, setTab] = useState<Tab>('contacts')
+  // null = dialer fills the screen; set to panel name to open that panel
+  const [activePanel, setActivePanel] = useState<Panel>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -34,7 +36,6 @@ function App() {
         window.electronAPI.db.getCallHistory(),
         window.electronAPI.db.getSettings(),
       ])
-
       setAccounts(accounts)
       setContacts(contacts)
       setCallHistory(history)
@@ -66,67 +67,67 @@ function App() {
       },
     })
 
-    return () => {
-      sipService.cleanup()
-    }
+    return () => { sipService.cleanup() }
   }, [])
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'contacts', label: 'Contacts' },
-    { id: 'history', label: 'History' },
-    { id: 'messages', label: 'Messages' },
+  const togglePanel = (panel: Panel) => {
+    setActivePanel((current) => (current === panel ? null : panel))
+  }
+
+  const navItems = [
+    { id: 'contacts' as Panel, icon: Users,         label: 'Contacts' },
+    { id: 'history'  as Panel, icon: History,       label: 'History'  },
+    { id: 'messages' as Panel, icon: MessageSquare, label: 'Messages' },
   ]
 
   return (
     <div className="flex flex-col h-screen bg-macos-bg-primary text-macos-text-primary overflow-hidden relative">
-      {/* Compact header: traffic lights + account switcher + actions */}
+      {/* Compact header */}
       <TitleBar />
 
-      {/* Dialer: number input + controls + optional dialpad */}
-      <Dialer />
+      {/* Main content — either dialer or a panel */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {activePanel === null && <Dialer />}
+        {activePanel === 'contacts' && <CompactContacts />}
+        {activePanel === 'history'  && <CompactHistory />}
+        {activePanel === 'messages' && (
+          <div className="flex-1 flex items-center justify-center text-xs text-macos-text-quaternary">
+            Messages — coming soon
+          </div>
+        )}
+      </div>
 
-      {/* Bottom section: tab bar + list */}
-      <div className="flex flex-col flex-1 min-h-0">
-        {/* Tab bar */}
-        <div className="flex border-b border-macos-separator flex-shrink-0"
-          style={{ background: 'rgba(28,28,30,0.6)' }}
-        >
-          {tabs.map((t) => (
+      {/* Bottom nav — always visible */}
+      <div
+        className="flex flex-shrink-0 border-t border-macos-separator"
+        style={{ background: 'rgba(28,28,30,0.95)' }}
+      >
+        {navItems.map(({ id, icon: Icon, label }) => {
+          const isActive = activePanel === id
+          return (
             <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
+              key={id}
+              onClick={() => togglePanel(id)}
               className={clsx(
-                'flex-1 py-1.5 text-[11px] font-medium transition-colors',
-                tab === t.id
-                  ? 'text-macos-accent-blue border-b border-macos-accent-blue'
+                'flex-1 flex flex-col items-center justify-center py-1.5 gap-0.5 transition-colors',
+                isActive
+                  ? 'text-macos-accent-blue'
                   : 'text-macos-text-quaternary hover:text-macos-text-tertiary'
               )}
             >
-              {t.label}
+              <Icon size={15} />
+              <span className="text-[9px] leading-none">{label}</span>
             </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
-        <div className="flex-1 min-h-0">
-          {tab === 'contacts' && <CompactContacts />}
-          {tab === 'history' && <CompactHistory />}
-          {tab === 'messages' && (
-            <div className="flex items-center justify-center h-full text-[11px] text-macos-text-quaternary">
-              Messages — coming soon
-            </div>
-          )}
-        </div>
+          )
+        })}
       </div>
 
-      {/* Incoming call compact banner */}
+      {/* Incoming call banner */}
       <IncomingCallModal />
 
       {/* Modals */}
       {showAddAccountModal && <AddAccountModal />}
-      {showSettingsModal && <CompactSettings />}
+      {showSettingsModal    && <CompactSettings />}
     </div>
   )
 }
-
-export default App
