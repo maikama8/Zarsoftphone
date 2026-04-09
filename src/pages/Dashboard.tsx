@@ -67,7 +67,7 @@ export default function Dashboard() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-semibold text-macos-text-primary mb-2">Dashboard</h1>
-          <p className="text-macos-text-tertiary">Welcome back to Zar Softphone</p>
+          <p className="text-macos-text-tertiary">Welcome back to Zarsip</p>
         </div>
 
         {/* Account Status */}

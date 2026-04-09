@@ -63,7 +63,7 @@ function createTray() {
     { label: 'Quit', click: () => app.quit() }
   ])
   
-  tray.setToolTip('Zar Softphone')
+  tray.setToolTip('Zarsip')
   tray.setContextMenu(contextMenu)
   
   tray.on('click', () => {

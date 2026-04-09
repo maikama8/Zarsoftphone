@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import CryptoJS from 'crypto-js'
 
-const ENCRYPTION_KEY = 'zar-softphone-secret-key-change-in-production'
+const ENCRYPTION_KEY = 'zarsip-secret-key-change-in-production'
 
 let db: Database.Database
 

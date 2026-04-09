@@ -5,9 +5,10 @@ import {
   Invitation,
   SessionState,
   RegistererState,
-  Web,
+  UserAgentOptions,
+  URI,
 } from 'sip.js'
-import type { SipAccount, CallState } from '../types'
+import type { SipAccount, CallState } from '../../types'
 
 export class SipService {
   private userAgents: Map<string, UserAgent> = new Map()
@@ -42,8 +43,8 @@ export class SipService {
         ? `wss://${account.server}:${account.port}`
         : `ws://${account.server}:${account.port}`
 
-      const userAgent = new UserAgent({
-        uri: Web.UserAgent.makeURI(uri),
+      const userAgentOptions: UserAgentOptions = {
+        uri: UserAgent.makeURI(uri) as URI,
         transportOptions: {
           server,
         },
@@ -57,7 +58,9 @@ export class SipService {
           },
           iceGatheringTimeout: 500,
         },
-      })
+      }
+
+      const userAgent = new UserAgent(userAgentOptions)
 
       // Handle incoming calls
       userAgent.delegate = {
@@ -127,7 +130,8 @@ export class SipService {
       throw new Error('Account not registered')
     }
 
-    const target = Web.UserAgent.makeURI(`sip:${targetNumber}@${userAgent.configuration.uri?.host}`)
+    const targetUri = `sip:${targetNumber}@${userAgent.configuration.uri?.host}`
+    const target = UserAgent.makeURI(targetUri) as URI
     if (!target) {
       throw new Error('Invalid target')
     }

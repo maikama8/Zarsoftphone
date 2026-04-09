@@ -1,4 +1,4 @@
-# Zar Softphone
+# Zarsip
 
 A compact, MicroSIP-style SIP softphone for macOS (and Windows/Linux) built with **Electron**, **React**, and **TypeScript**. Designed for speed and usability — small window, dense UI, no wasted space.
 

@@ -35,12 +35,12 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="p-6 border-b border-macos-separator">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-macos-lg bg-gradient-to-br from-macos-accent-blue to-blue-600 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-macos-lg bg-gradient-to-br from-[#0A84FF] to-[#0051D5] flex items-center justify-center shadow-lg">
             <Phone size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-macos-text-primary">Zar</h1>
-            <p className="text-xs text-macos-text-tertiary">Softphone</p>
+            <h1 className="text-lg font-semibold text-macos-text-primary">Zarsip</h1>
+            <p className="text-xs text-macos-text-tertiary">VoIP Client</p>
           </div>
         </div>
       </div>

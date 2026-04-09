@@ -1,0 +1,82 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with gradient -->
+  <rect width="1024" height="1024" rx="226" fill="url(#gradient)"/>
+  
+  <!-- Gradient definition -->
+  <defs>
+    <linearGradient id="gradient" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#007AFF"/>
+      <stop offset="100%" stop-color="#0051D5"/>
+    </linearGradient>
+    
+    <!-- Shadow for depth -->
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+      <feOffset dx="0" dy="4" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Glow effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Phone icon with modern design -->
+  <g filter="url(#shadow)">
+    <!-- Phone body -->
+    <path d="M 368 256 C 368 228.4 390.4 206 418 206 L 606 206 C 633.6 206 656 228.4 656 256 L 656 768 C 656 795.6 633.6 818 606 818 L 418 818 C 390.4 818 368 795.6 368 768 L 368 256 Z" 
+          fill="white" opacity="0.95"/>
+    
+    <!-- Screen area -->
+    <rect x="398" y="286" width="228" height="420" rx="12" fill="url(#screenGradient)"/>
+    
+    <linearGradient id="screenGradient" x1="512" y1="286" x2="512" y2="706" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E3F2FD"/>
+      <stop offset="100%" stop-color="#BBDEFB"/>
+    </linearGradient>
+    
+    <!-- Signal waves (left side) -->
+    <g opacity="0.8">
+      <path d="M 440 380 Q 420 400 440 420" stroke="white" stroke-width="8" stroke-linecap="round" fill="none"/>
+      <path d="M 430 360 Q 400 400 430 440" stroke="white" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.7"/>
+      <path d="M 420 340 Q 380 400 420 460" stroke="white" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.5"/>
+    </g>
+    
+    <!-- Signal waves (right side) -->
+    <g opacity="0.8">
+      <path d="M 584 380 Q 604 400 584 420" stroke="white" stroke-width="8" stroke-linecap="round" fill="none"/>
+      <path d="M 594 360 Q 624 400 594 440" stroke="white" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.7"/>
+      <path d="M 604 340 Q 644 400 604 460" stroke="white" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.5"/>
+    </g>
+    
+    <!-- Phone icon in center -->
+    <g transform="translate(512, 500)">
+      <path d="M -30 -35 L -20 -45 C -18 -47 -15 -47 -13 -45 L -5 -30 C -3 -28 -3 -25 -5 -23 L -12 -16 C -12 -16 -8 -5 5 8 C 18 21 29 25 29 25 L 36 18 C 38 16 41 16 43 18 L 58 26 C 60 28 60 31 58 33 L 48 43 C 46 45 43 46 40 45 C 25 42 5 35 -15 15 C -35 -5 -42 -25 -45 -40 C -46 -43 -45 -46 -43 -48 Z" 
+            fill="#007AFF" filter="url(#glow)"/>
+    </g>
+    
+    <!-- Home button indicator -->
+    <circle cx="512" cy="750" r="20" fill="white" opacity="0.3"/>
+    <circle cx="512" cy="750" r="16" fill="#007AFF" opacity="0.6"/>
+    
+    <!-- Top speaker -->
+    <rect x="482" y="246" width="60" height="8" rx="4" fill="#007AFF" opacity="0.3"/>
+    
+    <!-- Camera -->
+    <circle cx="552" cy="250" r="6" fill="#007AFF" opacity="0.4"/>
+  </g>
+  
+  <!-- Subtle highlight on top -->
+  <path d="M 226 0 C 226 0 0 0 0 226 L 0 100 C 0 0 100 0 226 0 Z" fill="white" opacity="0.1"/>
+</svg>
