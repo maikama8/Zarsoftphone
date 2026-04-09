@@ -1,0 +1,76 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+dist-electron/
+release/
+out/
+build/
+.cache/
+
+# Vite
+*.local
+
+# Electron builder artifacts
+*.dmg
+*.exe
+*.AppImage
+*.snap
+*.deb
+*.rpm
+*.pkg
+*.zip
+*.tar.gz
+
+# TypeScript
+*.tsbuildinfo
+*.js.map
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.editorconfig
+
+# OS artifacts
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime / temp
+tmp/
+temp/
+.tmp/
+*.pid
+*.seed
+
+# Database (user data, never commit)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3

@@ -1,0 +1,72 @@
+{
+  "name": "zarsoftphone",
+  "version": "1.0.0",
+  "description": "Modern SIP Softphone for macOS, Windows, and Linux",
+  "main": "dist-electron/main.js",
+  "author": "Zar Softphone",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && electron-builder",
+    "preview": "vite preview",
+    "electron:dev": "vite",
+    "electron:build": "tsc && vite build",
+    "dist": "npm run electron:build && electron-builder",
+    "dist:mac": "npm run electron:build && electron-builder --mac",
+    "dist:win": "npm run electron:build && electron-builder --win",
+    "dist:linux": "npm run electron:build && electron-builder --linux"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "zustand": "^4.5.0",
+    "sip.js": "^0.21.2",
+    "better-sqlite3": "^11.7.0",
+    "crypto-js": "^4.2.0",
+    "uuid": "^9.0.1",
+    "clsx": "^2.1.0",
+    "lucide-react": "^0.344.0"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1",
+    "vite": "^5.1.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.3.3",
+    "tailwindcss": "^3.4.1",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.35",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@types/better-sqlite3": "^7.6.9",
+    "@types/crypto-js": "^4.2.2",
+    "@types/uuid": "^9.0.8",
+    "vite-plugin-electron": "^0.28.4",
+    "vite-plugin-electron-renderer": "^0.14.5"
+  },
+  "build": {
+    "appId": "com.zar.softphone",
+    "productName": "Zar Softphone",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.business",
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Network"
+    }
+  }
+}

@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-macos-separator;
+  }
+
+  body {
+    @apply font-sf-pro bg-macos-bg-primary text-macos-text-primary;
+    font-size: 13px;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+  }
+
+  #root {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  /* Electron drag regions */
+  .app-drag {
+    -webkit-app-region: drag;
+    user-select: none;
+  }
+  .app-no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Glass effects */
+  .glass-effect {
+    background: rgba(28, 28, 30, 0.7);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+  }
+
+  .glass-effect-light {
+    background: rgba(44, 44, 46, 0.5);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+  }
+
+  /* Thin scrollbar for compact lists */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  /* Compact input used across all modals/panels */
+  .compact-input {
+    @apply bg-macos-bg-tertiary text-macos-text-primary rounded border border-macos-separator;
+    @apply focus:outline-none focus:ring-1 focus:ring-macos-accent-blue focus:border-transparent;
+    @apply transition-all duration-150;
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+
+  select.compact-input {
+    /* native appearance for selects */
+    appearance: auto;
+    -webkit-appearance: auto;
+  }
+
+  /* Legacy card / button utilities still used in Settings/Accounts pages */
+  .card-macos {
+    @apply bg-macos-bg-secondary rounded-macos p-3;
+    @apply border border-macos-separator;
+  }
+
+  .btn-macos {
+    @apply px-3 py-1.5 rounded-macos font-medium transition-all duration-150 text-sm;
+    @apply hover:scale-[1.01] active:scale-[0.99];
+  }
+
+  .btn-primary {
+    @apply btn-macos bg-macos-accent-blue text-white hover:bg-opacity-90;
+  }
+
+  .btn-secondary {
+    @apply btn-macos bg-macos-bg-tertiary text-macos-text-primary hover:bg-opacity-80;
+  }
+
+  .btn-danger {
+    @apply btn-macos bg-macos-accent-red text-white hover:bg-opacity-90;
+  }
+
+  .btn-success {
+    @apply btn-macos bg-macos-accent-green text-white hover:bg-opacity-90;
+  }
+
+  .input-macos {
+    @apply bg-macos-bg-tertiary text-macos-text-primary text-sm;
+    @apply border border-macos-separator rounded-macos px-3 py-1.5;
+    @apply focus:outline-none focus:ring-1 focus:ring-macos-accent-blue focus:border-transparent;
+    @apply transition-all duration-150;
+  }
+}
