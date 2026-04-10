@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, ChevronDown } from 'lucide-react'
 import { useStore } from '../store'
 import { sipService } from '../services/sip/SipService'
@@ -12,8 +12,8 @@ const defaultForm = {
   password: '',
   domain: '',
   server: '',
-  transport: 'WSS' as TransportType,
-  port: 443,
+  transport: 'UDP' as TransportType,
+  port: 5060,
   registrationExpiry: 600,
   stunServer: '',
   turnServer: '',
@@ -21,13 +21,39 @@ const defaultForm = {
 
 export default function AddAccountModal() {
   const setShowAddAccountModal = useStore((s) => s.setShowAddAccountModal)
+  const editingAccountId = useStore((s) => s.editingAccountId)
+  const setEditingAccountId = useStore((s) => s.setEditingAccountId)
   const accounts = useStore((s) => s.accounts)
   const addAccount = useStore((s) => s.addAccount)
+  const updateAccount = useStore((s) => s.updateAccount)
   const setSelectedAccountId = useStore((s) => s.setSelectedAccountId)
+
+  // Find the account being edited
+  const editingAccount = editingAccountId ? accounts.find(a => a.id === editingAccountId) : null
 
   const [form, setForm] = useState(defaultForm)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // Load account data when editing
+  useEffect(() => {
+    if (editingAccount) {
+      setForm({
+        displayName: editingAccount.displayName,
+        username: editingAccount.username,
+        password: editingAccount.password,
+        domain: editingAccount.domain,
+        server: editingAccount.server,
+        transport: editingAccount.transport,
+        port: editingAccount.port,
+        registrationExpiry: editingAccount.registrationExpiry,
+        stunServer: editingAccount.stunServer || '',
+        turnServer: editingAccount.turnServer || '',
+      })
+    } else {
+      setForm(defaultForm)
+    }
+  }, [editingAccount])
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -35,31 +61,51 @@ export default function AddAccountModal() {
     if (!form.displayName || !form.username || !form.password || !form.domain) return
     setSaving(true)
     try {
-      const newAccount: SipAccount = {
-        id: uuidv4(),
-        displayName: form.displayName,
-        username: form.username,
-        password: form.password,
-        domain: form.domain,
-        server: form.server || form.domain,
-        transport: form.transport,
-        port: form.port,
-        registrationExpiry: form.registrationExpiry,
-        stunServer: form.stunServer || undefined,
-        turnServer: form.turnServer || undefined,
-        isEnabled: true,
-        isDefault: accounts.length === 0,
-        registrationState: 'disconnected',
-      }
+      if (editingAccount) {
+        // Update existing account
+        await window.electronAPI.db.updateAccount(editingAccount.id, form)
+        updateAccount(editingAccount.id, form)
+        
+        // Re-register if enabled
+        if (editingAccount.isEnabled) {
+          await sipService.unregister(editingAccount.id)
+          await sipService.register({ ...editingAccount, ...form })
+        }
+      } else {
+        // Create new account
+        const newAccount: SipAccount = {
+          id: uuidv4(),
+          displayName: form.displayName,
+          username: form.username,
+          password: form.password,
+          domain: form.domain,
+          server: form.server || form.domain,
+          transport: form.transport,
+          port: form.port,
+          registrationExpiry: form.registrationExpiry,
+          stunServer: form.stunServer || undefined,
+          turnServer: form.turnServer || undefined,
+          isEnabled: true,
+          isDefault: accounts.length === 0,
+          registrationState: 'disconnected',
+        }
 
-      await window.electronAPI.db.addAccount(newAccount)
-      addAccount(newAccount)
-      setSelectedAccountId(newAccount.id)
-      await sipService.register(newAccount)
+        await window.electronAPI.db.addAccount(newAccount)
+        addAccount(newAccount)
+        setSelectedAccountId(newAccount.id)
+        await sipService.register(newAccount)
+      }
+      
       setShowAddAccountModal(false)
+      setEditingAccountId(null)
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleClose = () => {
+    setShowAddAccountModal(false)
+    setEditingAccountId(null)
   }
 
   const canSave = form.displayName && form.username && form.password && form.domain
@@ -68,7 +114,7 @@ export default function AddAccountModal() {
     <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in">
       <div
         className="absolute inset-0 bg-black bg-opacity-50"
-        onClick={() => setShowAddAccountModal(false)}
+        onClick={handleClose}
       />
 
       <div className="relative w-72 rounded-macos-lg border border-macos-separator shadow-macos-xl animate-scale-in"
@@ -76,9 +122,11 @@ export default function AddAccountModal() {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-macos-separator">
-          <span className="text-sm font-semibold text-macos-text-primary">Add SIP Account</span>
+          <span className="text-sm font-semibold text-macos-text-primary">
+            {editingAccount ? 'Edit SIP Account' : 'Add SIP Account'}
+          </span>
           <button
-            onClick={() => setShowAddAccountModal(false)}
+            onClick={handleClose}
             className="p-0.5 rounded hover:bg-macos-bg-tertiary transition-colors text-macos-text-tertiary"
           >
             <X size={14} />
@@ -149,11 +197,11 @@ export default function AddAccountModal() {
                 onChange={(e) => set('transport', e.target.value as TransportType)}
                 className="compact-input w-full"
               >
-                <option value="WSS">WSS</option>
-                <option value="WS">WS</option>
-                <option value="UDP">UDP</option>
-                <option value="TCP">TCP</option>
-                <option value="TLS">TLS</option>
+                <option value="UDP">UDP (Native)</option>
+                <option value="TCP">TCP (Native)</option>
+                <option value="TLS">TLS (Native)</option>
+                <option value="WSS">WSS (WebSocket Secure)</option>
+                <option value="WS">WS (WebSocket)</option>
               </select>
             </Field>
           </div>
@@ -215,7 +263,7 @@ export default function AddAccountModal() {
         {/* Footer */}
         <div className="flex gap-2 px-3 py-2 border-t border-macos-separator">
           <button
-            onClick={() => setShowAddAccountModal(false)}
+            onClick={handleClose}
             className="flex-1 py-1.5 text-xs rounded bg-macos-bg-tertiary hover:bg-opacity-80 text-macos-text-secondary transition-colors"
           >
             Cancel
@@ -230,7 +278,7 @@ export default function AddAccountModal() {
                 : 'bg-macos-bg-tertiary text-macos-text-quaternary cursor-not-allowed'
             )}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Saving…' : editingAccount ? 'Update' : 'Save'}
           </button>
         </div>
       </div>

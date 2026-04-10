@@ -80,7 +80,7 @@ export default function Contacts() {
     updateContact(contact.id, updated)
   }
 
-  const handleCall = (number: string) => {
+  const handleCall = (_number: string) => {
     setCurrentPage('dialer')
     // TODO: Set the number in dialer
   }

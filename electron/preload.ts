@@ -31,4 +31,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     maximize: () => ipcRenderer.invoke('maximize-window'),
     close: () => ipcRenderer.invoke('close-window'),
   },
+  
+  // Native SIP operations
+  sipNative: {
+    register: (account: any) => ipcRenderer.invoke('sip:register-native', account),
+    unregister: (accountId: string) => ipcRenderer.invoke('sip:unregister-native', accountId),
+    makeCall: (accountId: string, targetNumber: string) => ipcRenderer.invoke('sip:call-native', accountId, targetNumber),
+    hangup: (accountId: string) => ipcRenderer.invoke('sip:hangup-native', accountId),
+    
+    // Event listeners
+    onRegistered: (callback: (accountId: string) => void) => {
+      ipcRenderer.on('sip:registered', (_event, accountId) => callback(accountId))
+    },
+    onRegistrationFailed: (callback: (accountId: string, error: string) => void) => {
+      ipcRenderer.on('sip:registrationFailed', (_event, accountId, error) => callback(accountId, error))
+    },
+    onIncomingCall: (callback: (accountId: string, number: string) => void) => {
+      ipcRenderer.on('sip:incomingCall', (_event, accountId, number) => callback(accountId, number))
+    },
+    onCallState: (callback: (state: string) => void) => {
+      ipcRenderer.on('sip:callState', (_event, state) => callback(state))
+    },
+  },
 })

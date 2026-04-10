@@ -50,6 +50,7 @@ export default function App() {
 
     loadData()
 
+    // Set up WebSocket SIP callbacks
     sipService.setCallbacks({
       onRegistrationStateChange: (accountId, state) => {
         updateAccount(accountId, { registrationState: state as any })
@@ -65,6 +66,32 @@ export default function App() {
           updateCallState({ state })
         }
       },
+    })
+
+    // Set up Native SIP callbacks
+    window.electronAPI.sipNative.onRegistered((accountId) => {
+      console.log(`Native SIP: Account ${accountId} registered`)
+      updateAccount(accountId, { registrationState: 'registered' })
+    })
+
+    window.electronAPI.sipNative.onRegistrationFailed((accountId, error) => {
+      console.error(`Native SIP: Registration failed for ${accountId}:`, error)
+      updateAccount(accountId, { registrationState: 'failed' })
+    })
+
+    window.electronAPI.sipNative.onIncomingCall((accountId, remoteNumber) => {
+      console.log(`Native SIP: Incoming call from ${remoteNumber}`)
+      // TODO: Handle native incoming calls
+      window.electronAPI.notifications.show('Incoming Call', `Call from ${remoteNumber}`)
+    })
+
+    window.electronAPI.sipNative.onCallState((state) => {
+      console.log(`Native SIP: Call state ${state}`)
+      if (state === 'ended') {
+        setActiveCall(null)
+      } else {
+        updateCallState({ state: state as any })
+      }
     })
 
     return () => { sipService.cleanup() }

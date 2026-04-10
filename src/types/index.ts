@@ -1,5 +1,7 @@
 // SIP Account Types
-export type TransportType = 'UDP' | 'TCP' | 'TLS' | 'WSS'
+// Browser-based SIP clients only support WebSocket transports (WS/WSS)
+// UDP, TCP, TLS require native socket access - now available via NativeSipService in main process
+export type TransportType = 'UDP' | 'TCP' | 'TLS' | 'WS' | 'WSS'
 export type RegistrationState = 'disconnected' | 'registering' | 'registered' | 'failed'
 
 export interface SipAccount {
@@ -119,6 +121,18 @@ export interface ElectronAPI {
   window: {
     minimize: () => void
     close: () => void
+  }
+  
+  // Native SIP operations
+  sipNative: {
+    register: (account: any) => Promise<boolean>
+    unregister: (accountId: string) => Promise<void>
+    makeCall: (accountId: string, targetNumber: string) => Promise<void>
+    hangup: (accountId: string) => Promise<void>
+    onRegistered: (callback: (accountId: string) => void) => void
+    onRegistrationFailed: (callback: (accountId: string, error: string) => void) => void
+    onIncomingCall: (callback: (accountId: string, number: string) => void) => void
+    onCallState: (callback: (state: string) => void) => void
   }
 }
 

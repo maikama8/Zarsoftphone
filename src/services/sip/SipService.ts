@@ -38,10 +38,35 @@ export class SipService {
 
   async register(account: SipAccount) {
     try {
+      // Use native transport for UDP/TCP/TLS
+      if (['UDP', 'TCP', 'TLS'].includes(account.transport)) {
+        console.log(`Using native SIP service for ${account.transport}`)
+        const success = await window.electronAPI.sipNative.register(account)
+        if (success) {
+          this.onRegistrationStateChange?.(account.id, 'registered')
+        } else {
+          this.onRegistrationStateChange?.(account.id, 'failed')
+        }
+        return success
+      }
+
+      // Use WebSocket for WS/WSS (existing code)
       const uri = `sip:${account.username}@${account.domain}`
-      const server = account.transport === 'WSS' || account.transport === 'TLS'
+
+      // Browser-based SIP clients can only use WebSocket transport (WS/WSS)
+      // Auto-upgrade to WSS for secure ports (443, 8443) or when WSS is explicitly selected
+      const useSecure = account.transport === 'WSS' || account.port === 443 || account.port === 8443
+
+      const server = useSecure
         ? `wss://${account.server}:${account.port}`
         : `ws://${account.server}:${account.port}`
+
+      const iceServers: RTCIceServer[] = []
+      if (account.stunServer) iceServers.push({ urls: account.stunServer })
+      if (account.turnServer) iceServers.push({ urls: account.turnServer })
+      if (iceServers.length === 0) {
+        iceServers.push({ urls: 'stun:stun.l.google.com:19302' })
+      }
 
       const userAgentOptions: UserAgentOptions = {
         uri: UserAgent.makeURI(uri) as URI,
@@ -56,7 +81,10 @@ export class SipService {
             audio: true,
             video: false,
           },
-          iceGatheringTimeout: 500,
+          iceGatheringTimeout: 2000,
+          peerConnectionConfiguration: {
+            iceServers,
+          },
         },
       }
 
@@ -79,19 +107,14 @@ export class SipService {
       const registerer = new Registerer(userAgent)
       
       registerer.stateChange.addListener((state: RegistererState) => {
-        let stateStr = 'disconnected'
-        
-        if (state === RegistererState.Registered) {
-          stateStr = 'registered'
-        } else if (state === RegistererState.Unregistered) {
-          stateStr = 'disconnected'
-        } else {
-          stateStr = 'registering'
+        let stateStr: string
+        switch (state) {
+          case RegistererState.Registered:   stateStr = 'registered';   break
+          case RegistererState.Unregistered: stateStr = 'disconnected'; break
+          case RegistererState.Terminated:   stateStr = 'failed';       break
+          default:                           stateStr = 'registering';  break
         }
-        
-        if (this.onRegistrationStateChange) {
-          this.onRegistrationStateChange(account.id, stateStr)
-        }
+        this.onRegistrationStateChange?.(account.id, stateStr)
       })
 
       await registerer.register()
@@ -110,6 +133,14 @@ export class SipService {
   }
 
   async unregister(accountId: string) {
+    // Check if this account is using native transport
+    const account = this.userAgents.get(accountId)
+    if (!account) {
+      // Might be native transport
+      await window.electronAPI.sipNative.unregister(accountId)
+      return
+    }
+
     const registerer = this.registerers.get(accountId)
     const userAgent = this.userAgents.get(accountId)
 

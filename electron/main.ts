@@ -15,9 +15,11 @@ import {
   getSettings,
   updateSettings
 } from './database'
+import { NativeSipService } from './NativeSipService'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+let nativeSipService: NativeSipService | null = null
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -75,6 +77,30 @@ app.whenReady().then(() => {
   // Initialize database
   initDatabase()
   
+  // Initialize native SIP service
+  nativeSipService = new NativeSipService()
+  
+  // Set up SIP event handlers
+  nativeSipService.on('registered', (accountId: string) => {
+    console.log(`[Main] Account ${accountId} registered`)
+    mainWindow?.webContents.send('sip:registered', accountId)
+  })
+  
+  nativeSipService.on('registrationFailed', (accountId: string, error: any) => {
+    console.error(`[Main] Registration failed for ${accountId}:`, error)
+    mainWindow?.webContents.send('sip:registrationFailed', accountId, error.message)
+  })
+  
+  nativeSipService.on('incomingCall', (accountId: string, number: string) => {
+    console.log(`[Main] Incoming call from ${number}`)
+    mainWindow?.webContents.send('sip:incomingCall', accountId, number)
+  })
+  
+  nativeSipService.on('callState', (state: string) => {
+    console.log(`[Main] Call state: ${state}`)
+    mainWindow?.webContents.send('sip:callState', state)
+  })
+  
   createWindow()
   createTray()
 
@@ -129,4 +155,32 @@ ipcMain.handle('maximize-window', () => {
 
 ipcMain.handle('close-window', () => {
   mainWindow?.close()
+})
+
+// Native SIP IPC Handlers
+ipcMain.handle('sip:register-native', async (_event, account) => {
+  if (!nativeSipService) return false
+  return await nativeSipService.register(account)
+})
+
+ipcMain.handle('sip:unregister-native', async (_event, accountId) => {
+  if (!nativeSipService) return
+  await nativeSipService.unregister(accountId)
+})
+
+ipcMain.handle('sip:call-native', async (_event, accountId, targetNumber) => {
+  if (!nativeSipService) return
+  await nativeSipService.makeCall(accountId, targetNumber)
+})
+
+ipcMain.handle('sip:hangup-native', async (_event, accountId) => {
+  if (!nativeSipService) return
+  await nativeSipService.hangup(accountId)
+})
+
+// Cleanup on quit
+app.on('before-quit', () => {
+  if (nativeSipService) {
+    nativeSipService.cleanup()
+  }
 })

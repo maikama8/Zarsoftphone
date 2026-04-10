@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Power, Trash2 } from 'lucide-react'
+import { X, Power, Trash2, Edit } from 'lucide-react'
 import { useStore } from '../store'
 import { sipService } from '../services/sip/SipService'
 import clsx from 'clsx'
@@ -12,6 +12,7 @@ export default function CompactSettings() {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
   const setShowAddAccountModal = useStore((s) => s.setShowAddAccountModal)
+  const setEditingAccountId = useStore((s) => s.setEditingAccountId)
 
   const [tab, setTab] = useState<'accounts' | 'audio' | 'general'>('accounts')
 
@@ -24,6 +25,12 @@ export default function CompactSettings() {
     } else {
       await sipService.unregister(acc.id)
     }
+  }
+
+  const handleEditAccount = (acc: typeof accounts[0]) => {
+    setEditingAccountId(acc.id)
+    setShowSettingsModal(false)
+    setShowAddAccountModal(true)
   }
 
   const handleDeleteAccount = async (acc: typeof accounts[0]) => {
@@ -107,6 +114,13 @@ export default function CompactSettings() {
                       title={acc.isEnabled ? 'Disable' : 'Enable'}
                     >
                       <Power size={12} />
+                    </button>
+                    <button
+                      onClick={() => handleEditAccount(acc)}
+                      className="p-1 rounded text-macos-text-quaternary hover:text-macos-accent-blue hover:bg-macos-bg-tertiary transition-colors flex-shrink-0"
+                      title="Edit"
+                    >
+                      <Edit size={12} />
                     </button>
                     <button
                       onClick={() => handleDeleteAccount(acc)}

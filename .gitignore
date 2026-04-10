@@ -74,3 +74,9 @@ temp/
 *.db-wal
 *.sqlite
 *.sqlite3
+
+# Development documentation and artifacts
+.dev/
+*.md.backup
+.notes/
+docs-temp/

@@ -53,6 +53,8 @@ interface AppState {
   // Compact UI modals
   showAddAccountModal: boolean
   setShowAddAccountModal: (show: boolean) => void
+  editingAccountId: string | null
+  setEditingAccountId: (id: string | null) => void
   showSettingsModal: boolean
   setShowSettingsModal: (show: boolean) => void
 
@@ -140,6 +142,8 @@ export const useStore = create<AppState>((set) => ({
   // Compact UI modals
   showAddAccountModal: false,
   setShowAddAccountModal: (showAddAccountModal) => set({ showAddAccountModal }),
+  editingAccountId: null,
+  setEditingAccountId: (editingAccountId) => set({ editingAccountId }),
   showSettingsModal: false,
   setShowSettingsModal: (showSettingsModal) => set({ showSettingsModal }),
 

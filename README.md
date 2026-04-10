@@ -20,7 +20,10 @@ A compact, MicroSIP-style SIP softphone for macOS (and Windows/Linux) built with
 - **Incoming call banner** — compact bottom overlay (not a full-screen takeover)
 - **Contacts** — searchable list with favorites, inline call/edit/delete
 - **Call history** — filter by All / Incoming / Outgoing / Missed, click to redial
-- **Transport support** — WSS · WS · UDP · TCP · TLS
+- **Transport support** — UDP · TCP · TLS · WSS · WS (All standard SIP transports!)
+  - ✅ **Native transport support**: UDP/TCP/TLS via Node.js in main process
+  - ✅ **WebSocket support**: WS/WSS for WebRTC providers
+  - ✅ **Works with any SIP provider**: Bitcall.io, VoIP.ms, Twilio, and more!
 - **WebRTC media** — STUN/TURN support, automatic mic/speaker routing
 - **Local SQLite storage** — accounts, contacts, history with AES-encrypted passwords
 - **Native macOS notifications** for incoming calls
@@ -118,10 +121,12 @@ Click the **+** button in the top-right corner of the app (or open **Settings �
 | Display name | Work Phone |
 | Username | 1001 |
 | Password | ••••••• |
-| SIP domain | sip.example.com |
-| SIP server | sip.example.com |
-| Transport | WSS (recommended for WebRTC) |
-| Port | 443 (WSS) or 5060 (UDP/TCP) |
+| SIP domain | sip.example.com or gateway.bitcall.io |
+| SIP server | sip.example.com or gateway.bitcall.io |
+| Transport | UDP (recommended), TCP, TLS, or WSS |
+| Port | 5060 (UDP/TCP), 5061 (TLS), or 443 (WSS) |
+
+> **New**: Native UDP/TCP/TLS support! You can now use Zarsip with ANY SIP provider, including Bitcall.io. See [NATIVE_TRANSPORT_GUIDE.md](NATIVE_TRANSPORT_GUIDE.md) for details.
 
 The account registers immediately after saving. A colored dot in the header shows registration status:
 - **Green** — registered
