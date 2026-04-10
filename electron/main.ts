@@ -17,6 +17,13 @@ import {
 } from './database'
 import { NativeSipService } from './NativeSipService'
 
+// Extend app with isQuitting flag
+declare module 'electron' {
+  interface App {
+    isQuitting?: boolean
+  }
+}
+
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let nativeSipService: NativeSipService | null = null
@@ -50,27 +57,132 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
+  // Hide instead of close when clicking X
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
 }
 
 function createTray() {
-  // Create a simple tray icon (you'll need to add actual icon files)
-  const icon = nativeImage.createEmpty()
+  // Load tray icon based on platform
+  let trayIconPath: string
+  
+  if (process.platform === 'darwin') {
+    // macOS - use template icon
+    trayIconPath = isDev
+      ? path.join(__dirname, '../build/trayIcon.png')
+      : path.join(process.resourcesPath, 'trayIcon.png')
+  } else if (process.platform === 'win32') {
+    // Windows
+    trayIconPath = isDev
+      ? path.join(__dirname, '../build/trayIcon-win.png')
+      : path.join(process.resourcesPath, 'trayIcon-win.png')
+  } else {
+    // Linux
+    trayIconPath = isDev
+      ? path.join(__dirname, '../build/trayIcon.png')
+      : path.join(process.resourcesPath, 'trayIcon.png')
+  }
+  
+  // Create icon
+  let icon: nativeImage
+  try {
+    icon = nativeImage.createFromPath(trayIconPath)
+    
+    // If icon failed to load, try alternative path
+    if (icon.isEmpty()) {
+      const altPath = path.join(__dirname, '../public/icon.svg')
+      icon = nativeImage.createFromPath(altPath)
+      if (!icon.isEmpty()) {
+        icon = icon.resize({ width: 16, height: 16 })
+      }
+    }
+    
+    // Set as template for macOS (adapts to light/dark mode)
+    if (process.platform === 'darwin' && !icon.isEmpty()) {
+      icon.setTemplateImage(true)
+    }
+  } catch (error) {
+    console.error('Failed to load tray icon:', error)
+    // Create a simple fallback icon
+    icon = nativeImage.createEmpty()
+  }
+  
   tray = new Tray(icon)
   
+  updateTrayMenu()
+  
+  tray.setToolTip('Zarsip - SIP Softphone')
+  
+  // Click to show/hide window
+  tray.on('click', () => {
+    if (mainWindow?.isVisible()) {
+      mainWindow.hide()
+    } else {
+      mainWindow?.show()
+      mainWindow?.focus()
+    }
+  })
+  
+  // Right-click for menu
+  tray.on('right-click', () => {
+    tray?.popUpContextMenu()
+  })
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+  
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show App', click: () => mainWindow?.show() },
-    { label: 'Quit', click: () => app.quit() }
+    {
+      label: 'Zarsip',
+      enabled: false,
+      icon: nativeImage.createEmpty()
+    },
+    { type: 'separator' },
+    {
+      label: mainWindow?.isVisible() ? 'Hide Window' : 'Show Window',
+      click: () => {
+        if (mainWindow?.isVisible()) {
+          mainWindow.hide()
+        } else {
+          mainWindow?.show()
+          mainWindow?.focus()
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Accounts',
+      enabled: false
+    },
+    // Account status will be added dynamically here
+    { type: 'separator' },
+    {
+      label: 'About Zarsip',
+      click: () => {
+        mainWindow?.show()
+        mainWindow?.focus()
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit Zarsip',
+      click: () => {
+        app.isQuitting = true
+        app.quit()
+      }
+    }
   ])
   
-  tray.setToolTip('Zarsip')
   tray.setContextMenu(contextMenu)
-  
-  tray.on('click', () => {
-    mainWindow?.show()
-  })
 }
 
 app.whenReady().then(() => {
@@ -112,7 +224,10 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // Don't quit the app when all windows are closed
+  // The app will continue running in the tray
+  // Only quit on macOS if explicitly requested
+  if (process.platform !== 'darwin' && app.isQuitting) {
     app.quit()
   }
 })
