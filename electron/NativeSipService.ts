@@ -28,7 +28,6 @@ export class NativeSipService extends EventEmitter {
   private accounts: Map<string, SipAccount> = new Map()
   private callIds: Map<string, number> = new Map()
   private tags: Map<string, string> = new Map()
-  private branches: Map<string, string> = new Map()
   private currentCall: any = null
 
   constructor() {

@@ -79,7 +79,7 @@ export default function App() {
       updateAccount(accountId, { registrationState: 'failed' })
     })
 
-    window.electronAPI.sipNative.onIncomingCall((accountId, remoteNumber) => {
+    window.electronAPI.sipNative.onIncomingCall((_accountId, remoteNumber) => {
       console.log(`Native SIP: Incoming call from ${remoteNumber}`)
       // TODO: Handle native incoming calls
       window.electronAPI.notifications.show('Incoming Call', `Call from ${remoteNumber}`)
