@@ -18,11 +18,11 @@ import {
 import { NativeSipService } from './NativeSipService'
 
 // Extend app with isQuitting flag
-declare module 'electron' {
-  interface App {
-    isQuitting?: boolean
-  }
+interface AppWithQuitting extends Electron.App {
+  isQuitting?: boolean
 }
+
+const appWithQuitting = app as AppWithQuitting
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -60,7 +60,7 @@ function createWindow() {
 
   // Hide instead of close when clicking X
   mainWindow.on('close', (event) => {
-    if (!app.isQuitting) {
+    if (!appWithQuitting.isQuitting) {
       event.preventDefault()
       mainWindow?.hide()
     }
@@ -93,7 +93,7 @@ function createTray() {
   }
   
   // Create icon
-  let icon: nativeImage
+  let icon: Electron.NativeImage
   try {
     icon = nativeImage.createFromPath(trayIconPath)
     
@@ -177,7 +177,7 @@ function updateTrayMenu() {
     {
       label: 'Quit Zarsip',
       click: () => {
-        app.isQuitting = true
+        appWithQuitting.isQuitting = true
         app.quit()
       }
     }
@@ -228,7 +228,7 @@ app.on('window-all-closed', () => {
   // Don't quit the app when all windows are closed
   // The app will continue running in the tray
   // Only quit on macOS if explicitly requested
-  if (process.platform !== 'darwin' && app.isQuitting) {
+  if (process.platform !== 'darwin' && appWithQuitting.isQuitting) {
     app.quit()
   }
 })

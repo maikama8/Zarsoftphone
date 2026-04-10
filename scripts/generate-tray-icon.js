@@ -2,7 +2,7 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 
-const svgPath = path.join(__dirname, '../public/icon.svg');
+const svgPath = path.join(__dirname, '../public/tray-icon.svg');
 const buildPath = path.join(__dirname, '../build');
 
 // Create build directory if it doesn't exist
