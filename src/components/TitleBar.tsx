@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Settings, Plus, ChevronDown, X, Minus } from 'lucide-react'
+import { Settings, Plus, ChevronDown, X, Minus, RefreshCw } from 'lucide-react'
 import { useStore } from '../store'
 import clsx from 'clsx'
 
@@ -20,6 +20,7 @@ export default function TitleBar() {
   const accounts = useStore((s) => s.accounts)
   const selectedAccountId = useStore((s) => s.selectedAccountId)
   const setSelectedAccountId = useStore((s) => s.setSelectedAccountId)
+  const updateAccount = useStore((s) => s.updateAccount)
   const setShowAddAccountModal = useStore((s) => s.setShowAddAccountModal)
   const setShowSettingsModal = useStore((s) => s.setShowSettingsModal)
 
@@ -56,12 +57,12 @@ export default function TitleBar() {
   }
 
   return (
-    <div className="relative h-9 flex-shrink-0 border-b border-macos-separator app-drag select-none"
-      style={{ background: 'rgba(28,28,30,0.92)' }}
+    <div className="relative h-10 flex-shrink-0 app-drag select-none border-b"
+      style={{ background: 'rgba(24,24,26,0.96)', borderBottomColor: 'rgba(255,255,255,0.08)', boxShadow: '0 1px 0 rgba(0,0,0,0.3)' }}
     >
-      <div className="flex items-center h-full px-2 gap-1.5">
+      <div className="flex items-center h-full pl-3 pr-2 gap-2">
         {/* Traffic lights */}
-        <div className="flex items-center gap-1.5 app-no-drag flex-shrink-0">
+        <div className="flex items-center gap-2 app-no-drag flex-shrink-0">
           <button
             onClick={() => window.electronAPI.window.close()}
             className="w-3 h-3 rounded-full bg-[#ff5f57] hover:brightness-110 transition-all flex items-center justify-center group"
@@ -79,8 +80,8 @@ export default function TitleBar() {
           <div className="w-3 h-3 rounded-full bg-[#28c840] opacity-40" />
         </div>
 
-        {/* Account selector */}
-        <div className="flex-1 min-w-0 app-no-drag relative" ref={dropdownRef}>
+        {/* Account selector — extra left margin so it never crowds the traffic lights */}
+        <div className="flex-1 min-w-0 app-no-drag relative ml-3" ref={dropdownRef}>
           <button
             onClick={() => setDropdownOpen((o) => !o)}
             className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-macos-bg-tertiary transition-colors"
@@ -129,6 +130,24 @@ export default function TitleBar() {
               ))}
 
               <div className="border-t border-macos-separator">
+                {activeAccount && (
+                  <button
+                    onClick={async () => {
+                      if (!activeAccount) return
+                      setDropdownOpen(false)
+                      updateAccount(activeAccount.id, { registrationState: 'registering' })
+                      try {
+                        await window.electronAPI.sipNative.reconnect(activeAccount.id)
+                      } catch (e) {
+                        console.error('Reconnect failed:', e)
+                      }
+                    }}
+                    className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-macos-bg-tertiary transition-colors"
+                  >
+                    <RefreshCw size={10} className="text-macos-accent-blue flex-shrink-0" />
+                    <span className="text-xs text-macos-text-primary">Reconnect</span>
+                  </button>
+                )}
                 <button
                   onClick={() => { setShowAddAccountModal(true); setDropdownOpen(false) }}
                   className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-macos-bg-tertiary transition-colors"

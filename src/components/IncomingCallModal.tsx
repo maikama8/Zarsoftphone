@@ -14,6 +14,30 @@ export default function IncomingCallModal() {
   const displayName = contact?.name || incomingCall.remoteNumber
 
   const handleAnswer = async () => {
+    if (incomingCall.isNative) {
+      // Native incoming call has no sip.js session — answer via IPC.
+      await sipService.answerNativeCall({
+        accountId: incomingCall.accountId,
+        remoteNumber: incomingCall.remoteNumber,
+        callId: incomingCall.callId || '',
+      })
+      setActiveCall({
+        id: Date.now().toString(),
+        remoteNumber: incomingCall.remoteNumber,
+        remoteName: contact?.name,
+        direction: 'incoming',
+        state: 'connecting',
+        startTime: Date.now(),
+        duration: 0,
+        isMuted: false,
+        isHeld: false,
+        accountId: incomingCall.accountId,
+      })
+      // Native 'active' call-state will arrive via IPC and start the audio bridge.
+      setIncomingCall(null)
+      return
+    }
+    if (!incomingCall.session) return
     await sipService.answerCall(incomingCall.session)
     setActiveCall({
       id: Date.now().toString(),
@@ -31,6 +55,25 @@ export default function IncomingCallModal() {
   }
 
   const handleReject = async () => {
+    if (incomingCall.isNative) {
+      await sipService.rejectNativeCall({
+        accountId: incomingCall.accountId,
+        remoteNumber: incomingCall.remoteNumber,
+        callId: incomingCall.callId || '',
+      })
+      setIncomingCall(null)
+      await window.electronAPI.db.addCallHistory({
+        number: incomingCall.remoteNumber,
+        name: contact?.name,
+        direction: 'incoming',
+        status: 'missed',
+        duration: 0,
+        timestamp: Date.now(),
+        accountId: incomingCall.accountId,
+      })
+      return
+    }
+    if (!incomingCall.session) { setIncomingCall(null); return }
     await sipService.rejectCall(incomingCall.session)
     setIncomingCall(null)
     await window.electronAPI.db.addCallHistory({

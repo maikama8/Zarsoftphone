@@ -13,7 +13,7 @@ export function initDatabase() {
   const dbPath = path.join(userDataPath, 'softphone.db')
   
   db = new Database(dbPath)
-  
+
   // Create tables
   db.exec(`
     CREATE TABLE IF NOT EXISTS accounts (
@@ -59,7 +59,14 @@ export function initDatabase() {
       value TEXT NOT NULL
     );
   `)
-  
+
+  // Idempotent migrations for new columns (auth_user, realm, proxy).
+  const cols = db.prepare("PRAGMA table_info(accounts)").all() as { name: string }[]
+  const hasCol = (name: string) => cols.some(c => c.name === name)
+  if (!hasCol('auth_user')) db.exec("ALTER TABLE accounts ADD COLUMN auth_user TEXT")
+  if (!hasCol('realm')) db.exec("ALTER TABLE accounts ADD COLUMN realm TEXT")
+  if (!hasCol('proxy')) db.exec("ALTER TABLE accounts ADD COLUMN proxy TEXT")
+
   // Initialize default settings if not exists
   const settingsCount = db.prepare('SELECT COUNT(*) as count FROM settings').get() as { count: number }
   if (settingsCount.count === 0) {
@@ -105,6 +112,13 @@ export function getAccounts() {
     isEnabled: Boolean(acc.is_enabled),
     isDefault: Boolean(acc.is_default),
     transport: acc.transport as any,
+    // Fix the snake_case round-trip: rename DB columns to the camelCase the UI uses.
+    stunServer: acc.stun_server ?? null,
+    turnServer: acc.turn_server ?? null,
+    registrationExpiry: acc.registration_expiry ?? 600,
+    authUser: acc.auth_user ?? acc.username,
+    realm: acc.realm ?? null,
+    proxy: acc.proxy ?? null,
   }))
 }
 
@@ -112,12 +126,12 @@ export function addAccount(account: any) {
   const id = uuidv4()
   const stmt = db.prepare(`
     INSERT INTO accounts (
-      id, display_name, username, password, domain, server, 
+      id, display_name, username, password, domain, server,
       transport, port, registration_expiry, stun_server, turn_server,
-      is_enabled, is_default
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_enabled, is_default, auth_user, realm, proxy
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
-  
+
   stmt.run(
     id,
     account.displayName,
@@ -131,9 +145,12 @@ export function addAccount(account: any) {
     account.stunServer || null,
     account.turnServer || null,
     account.isEnabled ? 1 : 0,
-    account.isDefault ? 1 : 0
+    account.isDefault ? 1 : 0,
+    account.authUser || account.username,
+    account.realm || null,
+    account.proxy || null
   )
-  
+
   return id
 }
 
@@ -168,6 +185,30 @@ export function updateAccount(id: string, account: any) {
   if (account.port !== undefined) {
     updates.push('port = ?')
     values.push(account.port)
+  }
+  if (account.registrationExpiry !== undefined) {
+    updates.push('registration_expiry = ?')
+    values.push(account.registrationExpiry)
+  }
+  if (account.stunServer !== undefined) {
+    updates.push('stun_server = ?')
+    values.push(account.stunServer)
+  }
+  if (account.turnServer !== undefined) {
+    updates.push('turn_server = ?')
+    values.push(account.turnServer)
+  }
+  if (account.authUser !== undefined) {
+    updates.push('auth_user = ?')
+    values.push(account.authUser)
+  }
+  if (account.realm !== undefined) {
+    updates.push('realm = ?')
+    values.push(account.realm)
+  }
+  if (account.proxy !== undefined) {
+    updates.push('proxy = ?')
+    values.push(account.proxy)
   }
   if (account.isEnabled !== undefined) {
     updates.push('is_enabled = ?')

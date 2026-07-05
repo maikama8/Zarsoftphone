@@ -127,12 +127,28 @@ export interface ElectronAPI {
   sipNative: {
     register: (account: any) => Promise<boolean>
     unregister: (accountId: string) => Promise<void>
-    makeCall: (accountId: string, targetNumber: string) => Promise<void>
+    reconnect: (accountId: string) => Promise<boolean>
+    makeCall: (accountId: string, targetNumber: string) => Promise<string | null>
     hangup: (accountId: string) => Promise<void>
+    answer: (accountId: string, callId: string) => Promise<void>
+    reject: (accountId: string, callId: string) => Promise<void>
+    sendDTMF: (accountId: string, digit: string) => Promise<void>
+    mute: (accountId: string, muted: boolean) => Promise<void>
+    hold: (accountId: string) => Promise<void>
+    unhold: (accountId: string) => Promise<void>
     onRegistered: (callback: (accountId: string) => void) => void
     onRegistrationFailed: (callback: (accountId: string, error: string) => void) => void
-    onIncomingCall: (callback: (accountId: string, number: string) => void) => void
+    onIncomingCall: (callback: (accountId: string, number: string, callId: string) => void) => void
     onCallState: (callback: (state: string) => void) => void
+    onAuthRequired: (callback: (accountId: string) => void) => void
+    onError: (callback: (accountId: string, error: string) => void) => void
+  }
+
+  // RTP media bridge
+  rtp: {
+    sendMic: (accountId: string, frame: Int16Array) => void
+    onRemote: (callback: (frame: Int16Array) => void) => void
+    removeRemoteListener: () => void
   }
 }
 

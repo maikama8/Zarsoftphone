@@ -1,7 +1,7 @@
-import { 
-  UserAgent, 
-  Registerer, 
-  Inviter, 
+import {
+  UserAgent,
+  Registerer,
+  Inviter,
   Invitation,
   SessionState,
   RegistererState,
@@ -9,12 +9,27 @@ import {
   URI,
 } from 'sip.js'
 import type { SipAccount, CallState } from '../../types'
+import { NativeAudioBridge } from '../../audio/NativeAudioBridge'
+
+interface NativeIncomingCall {
+  accountId: string
+  remoteNumber: string
+  callId: string
+}
 
 export class SipService {
   private userAgents: Map<string, UserAgent> = new Map()
   private registerers: Map<string, Registerer> = new Map()
   private currentSession: Inviter | Invitation | null = null
   private remoteAudio: HTMLAudioElement | null = null
+
+  // Native (UDP/TCP/TLS) account tracking.
+  private nativeAccounts: Set<string> = new Set()
+  private registerSeen: Set<string> = new Set()
+  private accountById: Map<string, SipAccount> = new Map()
+  private currentCallIsNative = false
+  private currentCallAccountId: string | null = null
+  private audioBridge: NativeAudioBridge | null = null
   
   private onRegistrationStateChange?: (accountId: string, state: string) => void
   private onIncomingCall?: (accountId: string, remoteNumber: string, session: Invitation) => void
@@ -37,14 +52,23 @@ export class SipService {
   }
 
   async register(account: SipAccount) {
+    // React StrictMode double-mounts effects in dev — ensure we only register
+    // each account once per session (a re-register would orphan the first
+    // transport and its 32s timeout would later overwrite a successful result).
+    if (this.registerSeen.has(account.id)) return
+    this.registerSeen.add(account.id)
     try {
+      this.accountById.set(account.id, account)
       // Use native transport for UDP/TCP/TLS
       if (['UDP', 'TCP', 'TLS'].includes(account.transport)) {
         console.log(`Using native SIP service for ${account.transport}`)
+        this.nativeAccounts.add(account.id)
         const success = await window.electronAPI.sipNative.register(account)
-        if (success) {
-          this.onRegistrationStateChange?.(account.id, 'registered')
-        } else {
+        // Registration success/failure is driven asynchronously by the
+        // sipNative.onRegistered/onRegistrationFailed events wired in App.tsx;
+        // do not flip to 'registered' here — the main process has only sent
+        // the REGISTER, not yet received the 200 OK.
+        if (!success) {
           this.onRegistrationStateChange?.(account.id, 'failed')
         }
         return success
@@ -133,6 +157,9 @@ export class SipService {
   }
 
   async unregister(accountId: string) {
+    // Clear registration tracking so a re-enable can register again.
+    this.registerSeen.delete(accountId)
+    this.nativeAccounts.delete(accountId)
     // Check if this account is using native transport
     const account = this.userAgents.get(accountId)
     if (!account) {
@@ -156,6 +183,17 @@ export class SipService {
   }
 
   async makeCall(accountId: string, targetNumber: string) {
+    // Native (UDP/TCP/TLS) path: delegate to the main-process SIP stack.
+    if (this.nativeAccounts.has(accountId)) {
+      this.currentCallIsNative = true
+      this.currentCallAccountId = accountId
+      this.onCallStateChange?.('connecting')
+      // The main process drives subsequent states (ringing/active/ended) via
+      // the sipNative.onCallState IPC, wired in App.tsx.
+      await window.electronAPI.sipNative.makeCall(accountId, targetNumber)
+      return
+    }
+
     const userAgent = this.userAgents.get(accountId)
     if (!userAgent) {
       throw new Error('Account not registered')
@@ -169,6 +207,8 @@ export class SipService {
 
     const inviter = new Inviter(userAgent, target)
     this.currentSession = inviter
+    this.currentCallIsNative = false
+    this.currentCallAccountId = accountId
 
     // Setup session state change handler
     inviter.stateChange.addListener((state: SessionState) => {
@@ -185,6 +225,42 @@ export class SipService {
 
     await inviter.invite()
     this.onCallStateChange?.('ringing')
+  }
+
+  // Called by App.tsx when the native 'active' call-state arrives — set up the
+  // renderer-side audio bridge (mic capture + remote playback).
+  async setupNativeAudio(accountId: string): Promise<void> {
+    if (!this.audioBridge) {
+      this.audioBridge = new NativeAudioBridge()
+    }
+    await this.audioBridge.start(accountId)
+  }
+
+  async teardownNativeAudio(): Promise<void> {
+    if (this.audioBridge) {
+      await this.audioBridge.stop()
+      this.audioBridge = null
+    }
+  }
+
+  // Answer an incoming native call (no sip.js session object).
+  async answerNativeCall(call: NativeIncomingCall): Promise<void> {
+    this.currentCallIsNative = true
+    this.currentCallAccountId = call.accountId
+    await window.electronAPI.sipNative.answer(call.accountId, call.callId)
+  }
+
+  async rejectNativeCall(call: NativeIncomingCall): Promise<void> {
+    await window.electronAPI.sipNative.reject(call.accountId, call.callId)
+    this.onCallStateChange?.('ended')
+  }
+
+  getActiveAccountId(): string | null {
+    return this.currentCallAccountId
+  }
+
+  isCurrentCallNative(): boolean {
+    return this.currentCallIsNative
   }
 
   async answerCall(session: Invitation) {
@@ -209,6 +285,15 @@ export class SipService {
   }
 
   async hangup() {
+    // Native path: tell the main process to CANCEL/BYE.
+    if (this.currentCallIsNative && this.currentCallAccountId) {
+      const accountId = this.currentCallAccountId
+      this.currentCallIsNative = false
+      this.currentCallAccountId = null
+      await this.teardownNativeAudio()
+      await window.electronAPI.sipNative.hangup(accountId)
+      return
+    }
     if (this.currentSession) {
       if (this.currentSession instanceof Inviter) {
         await this.currentSession.cancel()
@@ -222,6 +307,11 @@ export class SipService {
   }
 
   async mute() {
+    if (this.currentCallIsNative) {
+      if (this.audioBridge) this.audioBridge.setMuted(true)
+      if (this.currentCallAccountId) await window.electronAPI.sipNative.mute(this.currentCallAccountId, true)
+      return
+    }
     if (this.currentSession?.sessionDescriptionHandler) {
       const pc = (this.currentSession.sessionDescriptionHandler as any).peerConnection
       if (pc) {
@@ -236,6 +326,11 @@ export class SipService {
   }
 
   async unmute() {
+    if (this.currentCallIsNative) {
+      if (this.audioBridge) this.audioBridge.setMuted(false)
+      if (this.currentCallAccountId) await window.electronAPI.sipNative.mute(this.currentCallAccountId, false)
+      return
+    }
     if (this.currentSession?.sessionDescriptionHandler) {
       const pc = (this.currentSession.sessionDescriptionHandler as any).peerConnection
       if (pc) {
@@ -250,15 +345,27 @@ export class SipService {
   }
 
   async hold() {
+    if (this.currentCallIsNative && this.currentCallAccountId) {
+      await window.electronAPI.sipNative.hold(this.currentCallAccountId)
+      return
+    }
     // Simplified hold - in production, use proper SIP hold/unhold
     await this.mute()
   }
 
   async unhold() {
+    if (this.currentCallIsNative && this.currentCallAccountId) {
+      await window.electronAPI.sipNative.unhold(this.currentCallAccountId)
+      return
+    }
     await this.unmute()
   }
 
   sendDTMF(digit: string) {
+    if (this.currentCallIsNative && this.currentCallAccountId) {
+      void window.electronAPI.sipNative.sendDTMF(this.currentCallAccountId, digit)
+      return
+    }
     if (this.currentSession?.sessionDescriptionHandler) {
       const pc = (this.currentSession.sessionDescriptionHandler as any).peerConnection
       if (pc) {

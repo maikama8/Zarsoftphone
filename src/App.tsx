@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Users, History, MessageSquare } from 'lucide-react'
+import { Users, History, MessageSquare, Phone } from 'lucide-react'
 import { useStore } from './store'
 import { sipService } from './services/sip/SipService'
 import TitleBar from './components/TitleBar'
@@ -43,7 +43,11 @@ export default function App() {
 
       for (const account of accounts) {
         if (account.isEnabled) {
-          await sipService.register(account)
+          try {
+            await sipService.register(account)
+          } catch (e) {
+            console.error('Register failed for', account.id, e)
+          }
         }
       }
     }
@@ -79,15 +83,22 @@ export default function App() {
       updateAccount(accountId, { registrationState: 'failed' })
     })
 
-    window.electronAPI.sipNative.onIncomingCall((_accountId, remoteNumber) => {
-      console.log(`Native SIP: Incoming call from ${remoteNumber}`)
-      // TODO: Handle native incoming calls
+    window.electronAPI.sipNative.onIncomingCall((accountId, remoteNumber, callId) => {
+      console.log(`Native SIP: Incoming call from ${remoteNumber} (callId ${callId})`)
+      setIncomingCall({ accountId, remoteNumber, session: null, isNative: true, callId })
       window.electronAPI.notifications.show('Incoming Call', `Call from ${remoteNumber}`)
     })
 
     window.electronAPI.sipNative.onCallState((state) => {
       console.log(`Native SIP: Call state ${state}`)
-      if (state === 'ended') {
+      if (state === 'active') {
+        // Outbound call connected: start the renderer audio bridge for mic/speaker.
+        updateCallState({ state: 'active', startTime: Date.now() })
+        sipService.setupNativeAudio(sipService.getActiveAccountId() || '').catch((e) => {
+          console.error('Failed to start native audio bridge:', e)
+        })
+      } else if (state === 'ended') {
+        sipService.teardownNativeAudio().catch(() => {})
         setActiveCall(null)
       } else {
         updateCallState({ state: state as any })
@@ -106,6 +117,8 @@ export default function App() {
     { id: 'history'  as Panel, icon: History,       label: 'History'  },
     { id: 'messages' as Panel, icon: MessageSquare, label: 'Messages' },
   ]
+
+  const goDialer = () => setActivePanel(null)
 
   return (
     <div className="flex flex-col h-screen bg-macos-bg-primary text-macos-text-primary overflow-hidden relative">
@@ -129,6 +142,19 @@ export default function App() {
         className="flex flex-shrink-0 border-t border-macos-separator"
         style={{ background: 'rgba(28,28,30,0.95)' }}
       >
+        {/* Dialer tab — returns to the dialpad (no panel active) */}
+        <button
+          onClick={goDialer}
+          className={clsx(
+            'flex-1 flex flex-col items-center justify-center py-1.5 gap-0.5 transition-colors',
+            activePanel === null
+              ? 'text-macos-accent-blue'
+              : 'text-macos-text-quaternary hover:text-macos-text-tertiary'
+          )}
+        >
+          <Phone size={15} />
+          <span className="text-[9px] leading-none">Dialer</span>
+        </button>
         {navItems.map(({ id, icon: Icon, label }) => {
           const isActive = activePanel === id
           return (

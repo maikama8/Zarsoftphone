@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Notification, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification, Tray, Menu, nativeImage, session } from 'electron'
 import path from 'path'
 import { 
   initDatabase,
@@ -15,7 +15,14 @@ import {
   getSettings,
   updateSettings
 } from './database'
-import { NativeSipService } from './NativeSipService'
+import { NativeSipService } from './sip/NativeSipService'
+
+// Safe IPC sender — guards against a null/destroyed window.
+function sendToRenderer(channel: string, ...args: unknown[]): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, ...args)
+  }
+}
 
 // Extend app with isQuitting flag
 interface AppWithQuitting extends Electron.App {
@@ -189,31 +196,51 @@ function updateTrayMenu() {
 app.whenReady().then(() => {
   // Initialize database
   initDatabase()
-  
+
+  // Allow the renderer to access the microphone without a per-attempt prompt.
+  // (macOS still shows the TCC system prompt once on first use.)
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
+    cb(permission === 'media')
+  })
+
   // Initialize native SIP service
   nativeSipService = new NativeSipService()
-  
+
+  // Push remote RTP audio frames to the renderer for playback.
+  nativeSipService.setRemoteFrameSink((frame: Int16Array) => {
+    sendToRenderer('rtp:remote', frame)
+  })
+
   // Set up SIP event handlers
   nativeSipService.on('registered', (accountId: string) => {
     console.log(`[Main] Account ${accountId} registered`)
-    mainWindow?.webContents.send('sip:registered', accountId)
+    sendToRenderer('sip:registered', accountId)
   })
-  
+
   nativeSipService.on('registrationFailed', (accountId: string, error: any) => {
     console.error(`[Main] Registration failed for ${accountId}:`, error)
-    mainWindow?.webContents.send('sip:registrationFailed', accountId, error.message)
+    sendToRenderer('sip:registrationFailed', accountId, typeof error === 'string' ? error : error?.message ?? String(error))
   })
-  
-  nativeSipService.on('incomingCall', (accountId: string, number: string) => {
-    console.log(`[Main] Incoming call from ${number}`)
-    mainWindow?.webContents.send('sip:incomingCall', accountId, number)
+
+  nativeSipService.on('incomingCall', (accountId: string, number: string, callId: string) => {
+    console.log(`[Main] Incoming call from ${number} (callId ${callId})`)
+    sendToRenderer('sip:incomingCall', accountId, number, callId)
   })
-  
+
   nativeSipService.on('callState', (state: string) => {
     console.log(`[Main] Call state: ${state}`)
-    mainWindow?.webContents.send('sip:callState', state)
+    sendToRenderer('sip:callState', state)
   })
-  
+
+  nativeSipService.on('authRequired', (accountId: string) => {
+    sendToRenderer('sip:authRequired', accountId)
+  })
+
+  nativeSipService.on('error', (accountId: string, error: any) => {
+    console.error(`[Main] SIP error for ${accountId}:`, error)
+    sendToRenderer('sip:error', accountId, typeof error === 'string' ? error : error?.message ?? String(error))
+  })
+
   createWindow()
   createTray()
 
@@ -284,14 +311,55 @@ ipcMain.handle('sip:unregister-native', async (_event, accountId) => {
   await nativeSipService.unregister(accountId)
 })
 
+ipcMain.handle('sip:reconnect-native', async (_event, accountId) => {
+  if (!nativeSipService) return false
+  return await nativeSipService.reconnect(accountId)
+})
+
 ipcMain.handle('sip:call-native', async (_event, accountId, targetNumber) => {
-  if (!nativeSipService) return
-  await nativeSipService.makeCall(accountId, targetNumber)
+  if (!nativeSipService) return null
+  return await nativeSipService.makeCall(accountId, targetNumber)
 })
 
 ipcMain.handle('sip:hangup-native', async (_event, accountId) => {
   if (!nativeSipService) return
   await nativeSipService.hangup(accountId)
+})
+
+ipcMain.handle('sip:answer-native', async (_event, accountId, callId) => {
+  if (!nativeSipService) return
+  await nativeSipService.answer(accountId, callId)
+})
+
+ipcMain.handle('sip:reject-native', async (_event, accountId, callId) => {
+  if (!nativeSipService) return
+  await nativeSipService.reject(accountId, callId)
+})
+
+ipcMain.handle('sip:dtmf-native', async (_event, accountId, digit) => {
+  if (!nativeSipService) return
+  nativeSipService.sendDTMF(accountId, digit)
+})
+
+ipcMain.handle('sip:mute-native', async (_event, accountId, muted) => {
+  if (!nativeSipService) return
+  nativeSipService.mute(accountId, muted)
+})
+
+ipcMain.handle('sip:hold-native', async (_event, accountId) => {
+  if (!nativeSipService) return
+  await nativeSipService.hold(accountId)
+})
+
+ipcMain.handle('sip:unhold-native', async (_event, accountId) => {
+  if (!nativeSipService) return
+  await nativeSipService.unhold(accountId)
+})
+
+// Mic audio frames from the renderer -> native RTP sender.
+ipcMain.on('rtp:mic', (_event, accountId, frame: Int16Array) => {
+  if (!nativeSipService) return
+  nativeSipService.feedMicFrame(accountId, frame)
 })
 
 // Cleanup on quit

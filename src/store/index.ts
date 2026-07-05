@@ -32,8 +32,8 @@ interface AppState {
   updateCallState: (updates: Partial<ActiveCall>) => void
 
   // Incoming Call
-  incomingCall: { accountId: string; remoteNumber: string; session: Invitation } | null
-  setIncomingCall: (call: { accountId: string; remoteNumber: string; session: Invitation } | null) => void
+  incomingCall: { accountId: string; remoteNumber: string; session: Invitation | null; isNative?: boolean; callId?: string } | null
+  setIncomingCall: (call: { accountId: string; remoteNumber: string; session: Invitation | null; isNative?: boolean; callId?: string } | null) => void
 
   // Audio Devices
   audioDevices: AudioDevice[]
