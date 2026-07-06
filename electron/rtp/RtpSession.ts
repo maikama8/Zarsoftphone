@@ -10,15 +10,16 @@ const PT_TELEPHONE_EVENT = 101
 const SAMPLES_PER_FRAME = 160 // 20ms @ 8kHz
 
 export interface RtpSessionOptions {
-  payloadType: number // 0 for PCMU
+  payloadType: number
   telephoneEventPt?: number
   ssrc?: number
+  onIncomingRtp?: () => void
 }
 
 export class RtpSession extends EventEmitter {
   private socket: RtpSocket
-  private remoteAddr: string
-  private remotePort: number
+  private _remoteAddr: string
+  private _remotePort: number
   private ssrc: number
   private seq: number
   private timestamp: number
@@ -26,6 +27,9 @@ export class RtpSession extends EventEmitter {
   private telephoneEventPt: number
   private muted = false
   private symmetricLocked = false
+  private keepaliveTimer: NodeJS.Timeout | null = null
+  private lastMicFrameAt = 0
+  private onIncomingRtp?: () => void
 
   // Jitter buffer: a small ring keyed by sequence. v1 = 4 slots, silence on underrun.
   private jitterBuf: Map<number, Int16Array> = new Map()
@@ -35,24 +39,35 @@ export class RtpSession extends EventEmitter {
   constructor(socket: RtpSocket, remoteAddr: string, remotePort: number, opts: RtpSessionOptions) {
     super()
     this.socket = socket
-    this.remoteAddr = remoteAddr
-    this.remotePort = remotePort
+    this._remoteAddr = remoteAddr
+    this._remotePort = remotePort
     this.ssrc = opts.ssrc ?? crypto.randomInt(0, 0xffffffff)
     this.seq = crypto.randomInt(0, 0xffff)
     this.timestamp = crypto.randomInt(0, 0xffffffff)
     this.payloadType = opts.payloadType
     this.telephoneEventPt = opts.telephoneEventPt ?? PT_TELEPHONE_EVENT
+    this.onIncomingRtp = opts.onIncomingRtp
 
     this.socket.on('message', (buf: Buffer, rinfo: { address: string; port: number }) => {
       this.handleIncoming(buf, rinfo)
     })
+
+    // Auto-pump silence RTP so the NAT pinhole stays open and carrier
+    // RTP-activity guards stay satisfied before the mic bridge delivers the
+    // first frame (typically 1–3 s after call setup) and during local mute.
+    // Many SIP trunks tear the call down within ~5–10 s of zero RTP.
+    this.lastMicFrameAt = Date.now()
+    this.keepaliveTimer = setInterval(() => this.sendKeepaliveIfIdle(), 20)
   }
 
   get localPort(): number { return this.socket.port }
+  get remoteAddr(): string { return this._remoteAddr }
+  get remotePort(): number { return this._remotePort }
 
   // Send a frame of 160 16-bit PCM samples (mono, 8kHz).
   sendFrame(pcm: Int16Array): void {
     if (this.muted) return
+    this.lastMicFrameAt = Date.now()
     if (pcm.length !== SAMPLES_PER_FRAME) {
       // Pad/truncate to 160.
       const fixed = new Int16Array(SAMPLES_PER_FRAME)
@@ -62,7 +77,7 @@ export class RtpSession extends EventEmitter {
     }
     const payload = pcmToUlaw(pcm)
     const packet = this.buildRtpPacket(this.payloadType, payload, false)
-    this.socket.send(packet, this.remotePort, this.remoteAddr)
+    this.socket.send(packet, this._remotePort, this._remoteAddr)
     this.seq = (this.seq + 1) & 0xffff
     this.timestamp = (this.timestamp + SAMPLES_PER_FRAME) >>> 0
   }
@@ -83,7 +98,7 @@ export class RtpSession extends EventEmitter {
       payload.writeUInt8((isEnd ? 0x80 : 0x00) | 0x0a, 1) // end bit + volume 10
       payload.writeUInt16BE(dur, 2)
       const packet = this.buildRtpPacket(this.telephoneEventPt, payload, i === 0, baseSeq + i, baseTs)
-      this.socket.send(packet, this.remotePort, this.remoteAddr)
+      this.socket.send(packet, this._remotePort, this._remoteAddr)
     }
     // Advance our seq/timestamp by the event duration.
     this.seq = (baseSeq + 3) & 0xffff
@@ -103,8 +118,8 @@ export class RtpSession extends EventEmitter {
   private handleIncoming(buf: Buffer, rinfo: { address: string; port: number }): void {
     // Symmetric RTP: lock to the source of the first packet (NAT pinhole).
     if (!this.symmetricLocked) {
-      this.remoteAddr = rinfo.address
-      this.remotePort = rinfo.port
+      this._remoteAddr = rinfo.address
+      this._remotePort = rinfo.port
       this.symmetricLocked = true
     }
     if (buf.length < 12) return
@@ -120,6 +135,7 @@ export class RtpSession extends EventEmitter {
     }
     if (pt !== this.payloadType) return
 
+    this.onIncomingRtp?.()
     const pcm = ulawToPcm(payload)
     this.jitterBuf.set(seq, pcm)
     if (this.lastRtpSeq === null) {
@@ -161,13 +177,28 @@ export class RtpSession extends EventEmitter {
 
   setMuted(muted: boolean): void { this.muted = muted }
 
+  // Send a 20 ms silence frame if the mic hasn't produced a frame recently.
+  // Uses the codec-appropriate "no signal" codeword (0xFF for PCMU, 0x55 for PCMA).
+  // Fires even when muted — the remote hears silence and the carrier still sees
+  // RTP, so it cannot time the call out from inactivity.
+  private sendKeepaliveIfIdle(): void {
+    if (Date.now() - this.lastMicFrameAt < 60) return
+    const fillByte = this.payloadType === 8 ? 0x55 : 0xff
+    const payload = Buffer.alloc(SAMPLES_PER_FRAME, fillByte)
+    const packet = this.buildRtpPacket(this.payloadType, payload, false)
+    this.socket.send(packet, this._remotePort, this._remoteAddr)
+    this.seq = (this.seq + 1) & 0xffff
+    this.timestamp = (this.timestamp + SAMPLES_PER_FRAME) >>> 0
+  }
+
   setRemote(addr: string, port: number): void {
-    this.remoteAddr = addr
-    this.remotePort = port
+    this._remoteAddr = addr
+    this._remotePort = port
     this.symmetricLocked = false
   }
 
   close(): void {
+    if (this.keepaliveTimer) { clearInterval(this.keepaliveTimer); this.keepaliveTimer = null }
     this.socket.close()
     this.jitterBuf.clear()
     this.removeAllListeners()

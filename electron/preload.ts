@@ -77,4 +77,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeAllListeners('rtp:remote')
     },
   },
+
+  log: (msg: string) => ipcRenderer.send('renderer:log', msg),
 })

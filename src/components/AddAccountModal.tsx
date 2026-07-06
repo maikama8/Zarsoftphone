@@ -17,6 +17,9 @@ const defaultForm = {
   registrationExpiry: 600,
   stunServer: '',
   turnServer: '',
+  authUser: '',
+  realm: '',
+  proxy: '',
 }
 
 export default function AddAccountModal() {
@@ -49,6 +52,9 @@ export default function AddAccountModal() {
         registrationExpiry: editingAccount.registrationExpiry,
         stunServer: editingAccount.stunServer || '',
         turnServer: editingAccount.turnServer || '',
+        authUser: (editingAccount as any).authUser || '',
+        realm: (editingAccount as any).realm || '',
+        proxy: (editingAccount as any).proxy || '',
       })
     } else {
       setForm(defaultForm)
@@ -85,10 +91,13 @@ export default function AddAccountModal() {
           registrationExpiry: form.registrationExpiry,
           stunServer: form.stunServer || undefined,
           turnServer: form.turnServer || undefined,
+          authUser: form.authUser || undefined,
+          realm: form.realm || undefined,
+          proxy: form.proxy || undefined,
           isEnabled: true,
           isDefault: accounts.length === 0,
           registrationState: 'disconnected',
-        }
+        } as SipAccount
 
         await window.electronAPI.db.addAccount(newAccount)
         addAccount(newAccount)
@@ -225,7 +234,10 @@ export default function AddAccountModal() {
                   <input
                     type="number"
                     value={form.port}
-                    onChange={(e) => set('port', parseInt(e.target.value) || 443)}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10)
+                      set('port', Number.isFinite(n) && n > 0 ? n : form.port)
+                    }}
                     className="compact-input w-full"
                   />
                 </Field>
@@ -238,6 +250,33 @@ export default function AddAccountModal() {
                   />
                 </Field>
               </div>
+              <Field label="Auth user (if different)">
+                <input
+                  type="text"
+                  value={form.authUser}
+                  onChange={(e) => set('authUser', e.target.value)}
+                  className="compact-input w-full"
+                  placeholder={form.username || 'same as username'}
+                />
+              </Field>
+              <Field label="Auth realm (optional)">
+                <input
+                  type="text"
+                  value={form.realm}
+                  onChange={(e) => set('realm', e.target.value)}
+                  className="compact-input w-full"
+                  placeholder="auto (server-provided)"
+                />
+              </Field>
+              <Field label="Outbound proxy (optional)">
+                <input
+                  type="text"
+                  value={form.proxy}
+                  onChange={(e) => set('proxy', e.target.value)}
+                  className="compact-input w-full"
+                  placeholder="sip:proxy.example.com:5060"
+                />
+              </Field>
               <Field label="STUN server">
                 <input
                   type="text"

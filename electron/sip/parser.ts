@@ -110,10 +110,16 @@ function canonicalName(name: string): string {
 }
 
 export function parseMessage(raw: string): SipMessage {
-  // Normalize line endings; trim any trailing CRLF beyond the body.
-  const crlf = raw.indexOf('\r\n')
-  const firstLineEnd = crlf === -1 ? raw.length : crlf
-  const firstLine = raw.substring(0, firstLineEnd)
+  // Some carriers send SIP responses with leading whitespace (e.g. "    SIP/2.0
+  // 200 OK"). RFC 3261 §7.5 says SIP elements SHOULD ignore leading CRLF/SP on
+  // incoming messages — trim it, otherwise responses are misclassified as
+  // requests (method="SIP/2.0"), client transactions never see their 200 OK,
+  // and retransmissions pile up until Timer F/B fires.
+  const trimmed = raw.replace(/^[\r\n\s\0]+/, '')
+  const crlf = trimmed.indexOf('\r\n')
+  const firstLineEnd = crlf === -1 ? trimmed.length : crlf
+  const firstLine = trimmed.substring(0, firstLineEnd)
+  raw = trimmed
 
   // Find header/body boundary (\r\n\r\n)
   let boundary = raw.indexOf('\r\n\r\n')

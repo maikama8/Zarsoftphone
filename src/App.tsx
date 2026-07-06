@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Users, History, MessageSquare, Phone } from 'lucide-react'
 import { useStore } from './store'
 import { sipService } from './services/sip/SipService'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import TitleBar from './components/TitleBar'
 import Dialer from './pages/Dialer'
 import CompactContacts from './components/CompactContacts'
@@ -27,6 +28,13 @@ export default function App() {
 
   // null = dialer fills the screen; set to panel name to open that panel
   const [activePanel, setActivePanel] = useState<Panel>(null)
+
+  useEffect(() => {
+    // Listen for navigation-to-dialer requests (e.g. from history click-to-call).
+    const onNavigateDialer = () => setActivePanel(null)
+    window.addEventListener('navigate-dialer', onNavigateDialer as EventListener)
+    return () => window.removeEventListener('navigate-dialer', onNavigateDialer as EventListener)
+  }, [])
 
   useEffect(() => {
     const loadData = async () => {
@@ -65,6 +73,22 @@ export default function App() {
       },
       onCallStateChange: (state) => {
         if (state === 'ended') {
+          const activeCall = useStore.getState().activeCall
+          if (activeCall) {
+            const duration = activeCall.startTime ? Math.floor((Date.now() - activeCall.startTime) / 1000) : 0
+            window.electronAPI.db.addCallHistory({
+              number: activeCall.remoteNumber,
+              name: activeCall.remoteName,
+              direction: activeCall.direction,
+              status: duration > 0 ? 'answered' : 'failed',
+              duration,
+              timestamp: Date.now(),
+              accountId: activeCall.accountId,
+            }).then(async () => {
+              const history = await window.electronAPI.db.getCallHistory()
+              useStore.getState().setCallHistory(history)
+            }).catch((e) => console.error('Failed to save call history:', e))
+          }
           setActiveCall(null)
         } else {
           updateCallState({ state })
@@ -92,13 +116,34 @@ export default function App() {
     window.electronAPI.sipNative.onCallState((state) => {
       console.log(`Native SIP: Call state ${state}`)
       if (state === 'active') {
-        // Outbound call connected: start the renderer audio bridge for mic/speaker.
+        // Outbound call connected: ensure the renderer audio bridge is running
+        // (makeCall pre-warms it — only start here if it failed earlier).
         updateCallState({ state: 'active', startTime: Date.now() })
-        sipService.setupNativeAudio(sipService.getActiveAccountId() || '').catch((e) => {
-          console.error('Failed to start native audio bridge:', e)
-        })
+        if (!sipService.isNativeAudioActive()) {
+          sipService.setupNativeAudio(sipService.getActiveAccountId() || '').catch((e) => {
+            console.error('Failed to start native audio bridge:', e)
+          })
+        }
       } else if (state === 'ended') {
         sipService.teardownNativeAudio().catch(() => {})
+        // Save the call to history before clearing the active call.
+        const activeCall = useStore.getState().activeCall
+        if (activeCall) {
+          const duration = activeCall.startTime ? Math.floor((Date.now() - activeCall.startTime) / 1000) : 0
+          window.electronAPI.db.addCallHistory({
+            number: activeCall.remoteNumber,
+            name: activeCall.remoteName,
+            direction: activeCall.direction,
+            status: duration > 0 ? 'answered' : 'failed',
+            duration,
+            timestamp: Date.now(),
+            accountId: activeCall.accountId,
+          }).then(async () => {
+            // Refresh history from DB so the list is always in sync.
+            const history = await window.electronAPI.db.getCallHistory()
+            useStore.getState().setCallHistory(history)
+          }).catch((e) => console.error('Failed to save call history:', e))
+        }
         setActiveCall(null)
       } else {
         updateCallState({ state: state as any })
@@ -121,6 +166,7 @@ export default function App() {
   const goDialer = () => setActivePanel(null)
 
   return (
+    <ErrorBoundary>
     <div className="flex flex-col h-screen bg-macos-bg-primary text-macos-text-primary overflow-hidden relative">
       {/* Compact header */}
       <TitleBar />
@@ -182,5 +228,6 @@ export default function App() {
       {showAddAccountModal && <AddAccountModal />}
       {showSettingsModal    && <CompactSettings />}
     </div>
+    </ErrorBoundary>
   )
 }

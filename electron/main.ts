@@ -19,8 +19,15 @@ import { NativeSipService } from './sip/NativeSipService'
 
 // Safe IPC sender — guards against a null/destroyed window.
 function sendToRenderer(channel: string, ...args: unknown[]): void {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(channel, ...args)
+  if (!rendererReady) return
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
+
+  try {
+    const frame = mainWindow.webContents.mainFrame as Electron.WebFrameMain & { isDestroyed?: () => boolean }
+    if (!frame || frame.isDestroyed?.()) return
+    frame.send(channel, ...args)
+  } catch {
+    // Renderer gone — drop the message silently instead of spamming logs.
   }
 }
 
@@ -34,6 +41,7 @@ const appWithQuitting = app as AppWithQuitting
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let nativeSipService: NativeSipService | null = null
+let rendererReady = false
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -46,10 +54,13 @@ function createWindow() {
     maxWidth: 480,
     titleBarStyle: 'hiddenInset',
     frame: false,
-    transparent: true,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    backgroundColor: '#00000000',
+    // transparent + vibrancy + getUserMedia crashes the macOS compositor
+    // when the mic permission popup appears — the renderer frame is disposed
+    // and the window goes blank. Disable both for now so audio works reliably.
+    transparent: false,
+    vibrancy: undefined,
+    visualEffectState: undefined,
+    backgroundColor: '#1c1c1e',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -75,6 +86,23 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  // Log renderer crashes so we can diagnose blank-screen issues.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    rendererReady = false
+    console.error(`[Main] Renderer GONE: reason=${details?.reason} exitCode=${details?.exitCode}`)
+  })
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('[Main] Renderer UNRESPONSIVE')
+  })
+  mainWindow.webContents.on('did-start-loading', () => {
+    rendererReady = false
+    console.log('[Main] Renderer STARTED LOADING (reload or navigation)')
+  })
+  mainWindow.webContents.on('did-finish-load', () => {
+    rendererReady = true
+    console.log('[Main] Renderer FINISHED LOAD')
   })
 }
 
@@ -360,6 +388,11 @@ ipcMain.handle('sip:unhold-native', async (_event, accountId) => {
 ipcMain.on('rtp:mic', (_event, accountId, frame: Int16Array) => {
   if (!nativeSipService) return
   nativeSipService.feedMicFrame(accountId, frame)
+})
+
+// Renderer log forwarding — so audio bridge errors show in the terminal.
+ipcMain.on('renderer:log', (_event, msg: string) => {
+  console.log(`[Renderer] ${msg}`)
 })
 
 // Cleanup on quit

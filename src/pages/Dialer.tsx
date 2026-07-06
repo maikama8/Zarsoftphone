@@ -94,15 +94,8 @@ export default function Dialer() {
   const handleHangup = async () => {
     if (!activeCall) return
     await sipService.hangup()
-    await window.electronAPI.db.addCallHistory({
-      number: activeCall.remoteNumber,
-      name: activeCall.remoteName,
-      direction: activeCall.direction,
-      status: 'answered',
-      duration: activeCall.duration,
-      timestamp: Date.now(),
-      accountId: activeCall.accountId,
-    })
+    // History is saved by App.tsx's onCallState('ended') handler for both
+    // native and WebSocket calls, covering remote-hangup too.
     setActiveCall(null)
     setDialNumber('')
     setShowDtmfPad(false)

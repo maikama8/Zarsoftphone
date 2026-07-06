@@ -150,6 +150,8 @@ export interface ElectronAPI {
     onRemote: (callback: (frame: Int16Array) => void) => void
     removeRemoteListener: () => void
   }
+
+  log: (msg: string) => void
 }
 
 declare global {

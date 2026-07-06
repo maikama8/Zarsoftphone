@@ -129,7 +129,7 @@ export function addAccount(account: any) {
       id, display_name, username, password, domain, server,
       transport, port, registration_expiry, stun_server, turn_server,
       is_enabled, is_default, auth_user, realm, proxy
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   stmt.run(

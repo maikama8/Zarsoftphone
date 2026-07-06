@@ -26,6 +26,7 @@ export default function CompactHistory() {
   const accounts = useStore((s) => s.accounts)
   const selectedAccountId = useStore((s) => s.selectedAccountId)
   const setActiveCall = useStore((s) => s.setActiveCall)
+  const setDialNumber = useStore((s) => s.setDialNumber)
 
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -49,6 +50,10 @@ export default function CompactHistory() {
 
   const handleCall = async (number: string) => {
     if (!activeAccount) return
+    // Show the number in the dialer and switch to it so the user sees the call.
+    setDialNumber(number)
+    // Switch to dialer tab by clearing the active panel.
+    window.dispatchEvent(new CustomEvent('navigate-dialer'))
     try {
       await sipService.makeCall(activeAccount.id, number)
       setActiveCall({
@@ -131,7 +136,10 @@ function HistoryRow({ call, onCall }: { call: CallHistory; onCall: () => void })
     : 'text-macos-accent-blue'
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 border-b border-macos-separator hover:bg-macos-bg-secondary transition-colors group">
+    <div
+      onClick={onCall}
+      className="flex items-center gap-2 px-2 py-1.5 border-b border-macos-separator hover:bg-macos-bg-secondary active:bg-macos-bg-tertiary transition-colors cursor-pointer group"
+    >
       {/* Direction icon */}
       <div className={clsx('flex-shrink-0', iconColor)}>
         <Icon size={13} />
@@ -155,10 +163,10 @@ function HistoryRow({ call, onCall }: { call: CallHistory; onCall: () => void })
         )}
       </div>
 
-      {/* Call back */}
+      {/* Call button — always visible */}
       <button
-        onClick={onCall}
-        className="p-1 rounded text-macos-accent-green opacity-0 group-hover:opacity-100 hover:bg-macos-accent-green hover:bg-opacity-10 transition-all flex-shrink-0"
+        onClick={(e) => { e.stopPropagation(); onCall() }}
+        className="p-1 rounded text-macos-accent-green hover:bg-macos-accent-green hover:bg-opacity-10 transition-all flex-shrink-0"
         title="Call back"
       >
         <Phone size={13} />

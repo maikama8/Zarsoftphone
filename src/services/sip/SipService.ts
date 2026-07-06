@@ -188,6 +188,13 @@ export class SipService {
       this.currentCallIsNative = true
       this.currentCallAccountId = accountId
       this.onCallStateChange?.('connecting')
+      // Pre-warm the renderer audio bridge (mic capture + remote playout) so RTP
+      // starts flowing the instant the 200 OK arrives. Gating this on 'active' adds
+      // 1–3 s of dead air while getUserMedia/AudioWorklet spin up, and most SIP
+      // trunks hang up when they see no RTP within a few seconds of the 200 OK.
+      this.setupNativeAudio(accountId).catch((e) => {
+        console.error('Failed to pre-warm native audio bridge:', e)
+      })
       // The main process drives subsequent states (ringing/active/ended) via
       // the sipNative.onCallState IPC, wired in App.tsx.
       await window.electronAPI.sipNative.makeCall(accountId, targetNumber)
@@ -229,17 +236,44 @@ export class SipService {
 
   // Called by App.tsx when the native 'active' call-state arrives — set up the
   // renderer-side audio bridge (mic capture + remote playback).
+  private audioBridgePromise: Promise<void> | null = null
+  private audioBridgeGeneration = 0
+
   async setupNativeAudio(accountId: string): Promise<void> {
-    if (!this.audioBridge) {
-      this.audioBridge = new NativeAudioBridge()
-    }
-    await this.audioBridge.start(accountId)
+    // Race-safe: if a setup is already in flight (e.g. makeCall pre-warm while
+    // the 'active' state arrives), return the same promise — never start a
+    // second getUserMedia() concurrently, which can crash the renderer on macOS.
+    if (this.audioBridge) return
+    if (this.audioBridgePromise) return this.audioBridgePromise
+    const generation = ++this.audioBridgeGeneration
+    this.audioBridgePromise = (async () => {
+      const bridge = new NativeAudioBridge()
+      try {
+        await bridge.start(accountId)
+        if (
+          this.audioBridgeGeneration !== generation ||
+          !this.currentCallIsNative ||
+          this.currentCallAccountId !== accountId
+        ) {
+          await bridge.stop()
+          return
+        }
+        this.audioBridge = bridge
+      } finally {
+        this.audioBridgePromise = null
+      }
+    })()
+    return this.audioBridgePromise
   }
 
   async teardownNativeAudio(): Promise<void> {
+    this.audioBridgeGeneration++
+    this.currentCallIsNative = false
+    this.currentCallAccountId = null
     if (this.audioBridge) {
-      await this.audioBridge.stop()
+      const bridge = this.audioBridge
       this.audioBridge = null
+      await bridge.stop()
     }
   }
 
@@ -247,6 +281,10 @@ export class SipService {
   async answerNativeCall(call: NativeIncomingCall): Promise<void> {
     this.currentCallIsNative = true
     this.currentCallAccountId = call.accountId
+    // Pre-warm the audio bridge so RTP flows the moment we send 200 OK.
+    this.setupNativeAudio(call.accountId).catch((e) => {
+      console.error('Failed to pre-warm native audio bridge (answer):', e)
+    })
     await window.electronAPI.sipNative.answer(call.accountId, call.callId)
   }
 
@@ -257,6 +295,10 @@ export class SipService {
 
   getActiveAccountId(): string | null {
     return this.currentCallAccountId
+  }
+
+  isNativeAudioActive(): boolean {
+    return this.audioBridge != null
   }
 
   isCurrentCallNative(): boolean {

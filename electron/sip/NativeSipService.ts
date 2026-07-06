@@ -86,12 +86,26 @@ export class NativeSipService extends EventEmitter {
   }
 
   // Called by main.ts to feed a mic frame from the renderer into the active call.
+  private micFrameCount = 0
+  private remoteRtpCount = 0
+
   feedMicFrame(accountId: string, frame: Int16Array): void {
     const callId = this.activeCallByAccount.get(accountId)
     if (!callId) return
     const call = this.calls.get(callId)
     if (!call || !call.rtp) return
     call.rtp.sendFrame(frame)
+    this.micFrameCount++
+    if (this.micFrameCount % 50 === 1) {
+      console.log(`[NativeSIP] mic frame #${this.micFrameCount} -> RTP (call ${callId.substring(0, 8)})`)
+    }
+  }
+
+  onRemoteRtpReceived(): void {
+    this.remoteRtpCount++
+    if (this.remoteRtpCount % 50 === 1) {
+      console.log(`[NativeSIP] remote RTP packet #${this.remoteRtpCount} received`)
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -591,7 +605,7 @@ export class NativeSipService extends EventEmitter {
       `From: ${call.fromHeader}\r\n` +
       `To: ${toHdr}\r\n` +
       `Call-ID: ${call.callId}\r\n` +
-      `CSeq: 1 ACK\r\n` +
+      `CSeq: ${call.inviteCSeq} ACK\r\n` +
       `${route}` +
       `User-Agent: Zarsip/1.0\r\n` +
       `Content-Length: 0\r\n\r\n`
@@ -609,10 +623,9 @@ export class NativeSipService extends EventEmitter {
       `Via: SIP/2.0/${account.transport} ${localIp}:${localPort};branch=${call.inviteBranch};rport\r\n` +
       `Max-Forwards: 70\r\n` +
       `From: ${call.fromHeader}\r\n` +
-      `From: <sip:${account.username}@${account.domain}>;tag=${call.localTag}\r\n` +
       `To: ${toHdr}\r\n` +
       `Call-ID: ${call.callId}\r\n` +
-      `CSeq: 1 ACK\r\n` +
+      `CSeq: ${call.inviteCSeq} ACK\r\n` +
       `User-Agent: Zarsip/1.0\r\n` +
       `Content-Length: 0\r\n\r\n`
     ctx.transport.send(raw)
@@ -651,7 +664,7 @@ export class NativeSipService extends EventEmitter {
       `From: <sip:${account.username}@${account.domain}>;tag=${call.localTag}\r\n` +
       `To: <sip:${call.targetNumber}@${account.domain}>\r\n` +
       `Call-ID: ${call.callId}\r\n` +
-      `CSeq: 1 CANCEL\r\n` +
+      `CSeq: ${call.inviteCSeq} CANCEL\r\n` +
       `User-Agent: Zarsip/1.0\r\n` +
       `Content-Length: 0\r\n\r\n`
     ctx.txLayer.sendClientTransaction({
@@ -890,7 +903,26 @@ export class NativeSipService extends EventEmitter {
     }
 
     if (method === 'INVITE') {
-      const callId = getHeader(msg, 'Call-ID') || this.generateCallId()
+      const toHdr = getHeader(msg, 'To') || ''
+      const toHasTag = /tag=\S+/.test(toHdr)
+      const callIdHdr = getHeader(msg, 'Call-ID') || ''
+      const existingCall = callIdHdr ? this.calls.get(callIdHdr) : undefined
+      if (toHasTag) {
+        // In-dialog re-INVITE (session-timer refresh, RTP latch, hold/unhold).
+        // Reply 200 OK preserving our current media parameters — never treat it
+        // as a fresh incoming call, which would corrupt active-call state and
+        // pop a spurious "incoming call" banner mid-conversation.
+        if (existingCall) {
+          this.handleReInvite(ctx, msg, existingCall, branch)
+        } else {
+          const resp = this.buildSimpleResponse(msg, 481, 'Call/Transaction Does Not Exist', ctx)
+          ctx.transport.send(resp)
+          ctx.txLayer.rememberServerResponse(branch, 'INVITE', resp, false)
+        }
+        return
+      }
+
+      const callId = callIdHdr || this.generateCallId()
       const fromHdr = getHeader(msg, 'From') || ''
       const remoteNumber = this.extractNumber(fromHdr)
       const localTag = this.generateTag()
@@ -972,6 +1004,62 @@ export class NativeSipService extends EventEmitter {
     }
   }
 
+  // Respond to an in-dialog re-INVITE: keep using the existing RTP socket
+  // and session parameters, possibly update the remote RTP endpoint from
+  // the carrier-supplied SDP, and emit 200 OK with our current SDP. RFC 3261
+  // §14 — never allocate a fresh Call-ID/dialog for an in-dialog re-INVITE.
+  private handleReInvite(ctx: AccountContext, msg: SipMessage, call: CallContext, branch: string): void {
+    const account = ctx.account
+    const localIp = ctx.transport.localAddress
+    const localPort = ctx.transport.localPort
+    const rtpPort = call.localSdpPort || 0
+
+    // Take the offer if any and refresh our negotiated parameters.
+    if (msg.body) {
+      const offer = parseSdp(msg.body)
+      const neg = offer ? negotiate(offer) : undefined
+      if (neg) {
+        // Update remote RTP endpoint symmetrically if the carrier moved it.
+        if (call.rtp && (neg.remoteRtpIp !== call.rtp.remoteAddr || neg.remoteRtpPort !== call.rtp.remotePort)) {
+          call.rtp.setRemote(neg.remoteRtpIp, neg.remoteRtpPort)
+        }
+        call.negotiated = neg
+      }
+    }
+
+    const sdp = buildSdp({
+      localIp, rtpPort,
+      payloadType: call.negotiated?.payloadType || '0',
+      direction: 'sendrecv',
+      telephoneEventPt: call.negotiated?.telephoneEventPt || '101',
+      sessionId: call.sessionId || 1, sessionVersion: 3,
+    })
+
+    const via = getHeaders(msg, 'Via').map(h => `Via: ${h.value}\r\n`).join('')
+    const fromHdr = getHeader(msg, 'From') || ''
+    const toHdr = getHeader(msg, 'To') || ''
+    const callId = getHeader(msg, 'Call-ID') || ''
+    const cseq = getHeader(msg, 'CSeq') || ''
+    const route = call.dialog?.routeSet?.length
+      ? call.dialog.routeSet.map(r => `Route: ${r}\r\n`).join('')
+      : ''
+
+    const raw =
+      `SIP/2.0 200 OK\r\n` +
+      via +
+      `From: ${fromHdr}\r\n` +
+      `To: ${toHdr}\r\n` +
+      `Call-ID: ${callId}\r\n` +
+      `CSeq: ${cseq}\r\n` +
+      `Contact: <sip:${account.username}@${localIp}:${localPort};transport=${account.transport.toLowerCase()}>\r\n` +
+      `${route}` +
+      `User-Agent: Zarsip/1.0\r\n` +
+      `Content-Type: application/sdp\r\n` +
+      `Content-Length: ${Buffer.byteLength(sdp, 'latin1')}\r\n\r\n${sdp}`
+    ctx.transport.send(raw)
+    ctx.txLayer.rememberServerResponse(branch, 'INVITE', raw, true)
+  }
+
   private buildSimpleResponse(req: SipMessage, code: number, reason: string, ctx: AccountContext): string {
     const via = getHeaders(req, 'Via').map(h => `Via: ${h.value}\r\n`).join('')
     const from = getHeader(req, 'From')
@@ -996,8 +1084,12 @@ export class NativeSipService extends EventEmitter {
   // ---------------------------------------------------------------------------
 
   private maybeStartRtp(call: CallContext, resp: SipMessage): void {
-    if (!resp.body) return
+    if (!resp.body) {
+      console.warn('[NativeSIP] 2xx/183 has empty body — no SDP answer to negotiate RTP')
+      return
+    }
     const sdp = parseSdp(resp.body)
+    console.log(`[NativeSIP] Remote SDP answer:\n${resp.body}`)
     const neg = negotiate(sdp)
     if (!neg) {
       console.warn('[NativeSIP] No negotiable audio in SDP answer')
@@ -1014,6 +1106,14 @@ export class NativeSipService extends EventEmitter {
       console.warn('[NativeSIP] SDP answer missing remote RTP endpoint')
       return
     }
+    // 0.0.0.0 means the remote is holding / not yet ready to receive media.
+    // Many carriers send c=IN IP4 0.0.0.0 in 183/200 when the callee hasn't
+    // actually answered — sending RTP there is a black hole.
+    if (neg.remoteRtpIp === '0.0.0.0') {
+      console.warn(`[NativeSIP] Remote RTP IP is 0.0.0.0 (hold/early-media placeholder) — RTP will not be sent until carrier provides a real endpoint`)
+    } else {
+      console.log(`[NativeSIP] RTP -> ${neg.remoteRtpIp}:${neg.remoteRtpPort} (codec=${neg.codec} pt=${neg.payloadType})`)
+    }
     // If early-media RTP was already started (183), tear it down before
     // re-binding on the 200 OK to avoid orphaned sessions/timers.
     if (call.rtp) {
@@ -1024,6 +1124,7 @@ export class NativeSipService extends EventEmitter {
     const session = new RtpSession(call.rtpSocket, neg.remoteRtpIp, neg.remoteRtpPort, {
       payloadType: parseInt(neg.payloadType, 10) || 0,
       telephoneEventPt: neg.telephoneEventPt ? parseInt(neg.telephoneEventPt, 10) : 101,
+      onIncomingRtp: () => this.onRemoteRtpReceived(),
     })
     call.rtp = session
     // Proactively pump 20ms frames to the renderer for playout.
