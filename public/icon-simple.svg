@@ -1,94 +1,15 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- macOS style rounded square background -->
-  <rect width="1024" height="1024" rx="226" fill="url(#bgGradient)"/>
-  
+  <!-- Zarsip flat "Z" mark (no filters) for small/simple contexts -->
   <defs>
-    <!-- Main gradient -->
-    <linearGradient id="bgGradient" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+    <linearGradient id="zBgFlat" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#0A84FF"/>
       <stop offset="100%" stop-color="#0051D5"/>
     </linearGradient>
-    
-    <!-- Glow effect -->
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="12" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-    
-    <!-- Inner shadow -->
-    <filter id="innerShadow">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
-      <feOffset dx="0" dy="2" result="offsetblur"/>
-      <feFlood flood-color="#000000" flood-opacity="0.2"/>
-      <feComposite in2="offsetblur" operator="in"/>
-      <feMerge>
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
   </defs>
-  
-  <!-- Subtle top highlight -->
-  <path d="M 226 0 C 100 0 0 100 0 226 L 0 100 C 0 44.77 44.77 0 100 0 L 226 0 Z" fill="white" opacity="0.15"/>
-  
-  <!-- Main phone icon -->
-  <g transform="translate(512, 512)" filter="url(#glow)">
-    <!-- Classic phone handset shape -->
-    <path d="M -140 -160 L -80 -220 C -70 -230 -55 -230 -45 -220 L 0 -140 C 10 -130 10 -115 0 -105 L -40 -65 C -40 -65 -20 0 60 80 C 140 160 205 180 205 180 L 245 140 C 255 130 270 130 280 140 L 360 195 C 370 205 370 220 360 230 L 300 290 C 290 300 275 305 260 300 C 180 280 80 240 -40 120 C -160 0 -200 -100 -220 -180 C -225 -195 -220 -210 -210 -220 Z" 
-          fill="white" 
-          opacity="0.95"
-          stroke="white" 
-          stroke-width="8" 
-          stroke-linejoin="round"/>
-  </g>
-  
-  <!-- Signal waves - left -->
-  <g opacity="0.85" filter="url(#glow)">
-    <path d="M 280 420 Q 240 480 280 540" 
-          stroke="white" 
-          stroke-width="24" 
-          stroke-linecap="round" 
-          fill="none"
-          opacity="0.9"/>
-    <path d="M 240 380 Q 180 480 240 580" 
-          stroke="white" 
-          stroke-width="20" 
-          stroke-linecap="round" 
-          fill="none"
-          opacity="0.6"/>
-    <path d="M 200 340 Q 120 480 200 620" 
-          stroke="white" 
-          stroke-width="16" 
-          stroke-linecap="round" 
-          fill="none"
-          opacity="0.3"/>
-  </g>
-  
-  <!-- Signal waves - right -->
-  <g opacity="0.85" filter="url(#glow)">
-    <path d="M 744 420 Q 784 480 744 540" 
-          stroke="white" 
-          stroke-width="24" 
-          stroke-linecap="round" 
-          fill="none"
-          opacity="0.9"/>
-    <path d="M 784 380 Q 844 480 784 580" 
-          stroke="white" 
-          stroke-width="20" 
-          stroke-linecap="round" 
-          fill="none"
-          opacity="0.6"/>
-    <path d="M 824 340 Q 904 480 824 620" 
-          stroke="white" 
-          stroke-width="16" 
-          stroke-linecap="round" 
-          fill="none"
-          opacity="0.3"/>
-  </g>
-  
-  <!-- Bottom shadow for depth -->
-  <ellipse cx="512" cy="900" rx="300" ry="40" fill="black" opacity="0.1"/>
+  <rect width="1024" height="1024" rx="226.67" fill="url(#zBgFlat)"/>
+  <polyline points="312,356 712,356 312,668 712,668"
+            fill="none" stroke="#ffffff" stroke-width="118"
+            stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="312" cy="668" r="30" fill="#0A84FF"/>
+  <circle cx="312" cy="668" r="15" fill="#ffffff"/>
 </svg>

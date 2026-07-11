@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Settings, Plus, ChevronDown, X, Minus, RefreshCw } from 'lucide-react'
 import { useStore } from '../store'
 import clsx from 'clsx'
+import Logo from './Logo'
 
 function StatusDot({ state }: { state?: string }) {
   return (
@@ -57,9 +58,7 @@ export default function TitleBar() {
   }
 
   return (
-    <div className="relative h-10 flex-shrink-0 app-drag select-none border-b"
-      style={{ background: 'rgba(24,24,26,0.96)', borderBottomColor: 'rgba(255,255,255,0.08)', boxShadow: '0 1px 0 rgba(0,0,0,0.3)' }}
-    >
+    <div className="relative h-10 flex-shrink-0 app-drag select-none border-b border-macos-separator surface-bar">
       <div className="flex items-center h-full pl-3 pr-2 gap-2">
         {/* Traffic lights */}
         <div className="flex items-center gap-2 app-no-drag flex-shrink-0">
@@ -80,15 +79,22 @@ export default function TitleBar() {
           <div className="w-3 h-3 rounded-full bg-[#28c840] opacity-40" />
         </div>
 
-        {/* Account selector — extra left margin so it never crowds the traffic lights */}
-        <div className="flex-1 min-w-0 app-no-drag relative ml-3" ref={dropdownRef}>
+        {/* Brand mark */}
+        <div className="flex-shrink-0 ml-1">
+          <Logo size={18} />
+        </div>
+
+        {/* Account selector */}
+        <div className="flex-1 min-w-0 app-no-drag relative ml-1" ref={dropdownRef}>
           <button
             onClick={() => setDropdownOpen((o) => !o)}
             className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-macos-bg-tertiary transition-colors"
           >
             <StatusDot state={activeAccount?.registrationState} />
             <span className="text-xs font-medium text-macos-text-primary truncate flex-1 text-left">
-              {activeAccount ? `${activeAccount.username}@${activeAccount.domain}` : 'No account'}
+              {activeAccount
+                ? (activeAccount.displayName?.trim() || `${activeAccount.username}@${activeAccount.domain}`)
+                : 'No account'}
             </span>
             {enabledAccounts.length > 1 && (
               <ChevronDown
@@ -100,9 +106,7 @@ export default function TitleBar() {
 
           {/* Account dropdown */}
           {dropdownOpen && enabledAccounts.length > 0 && (
-            <div className="absolute top-full left-0 right-0 z-50 mt-0.5 rounded shadow-macos-lg border border-macos-separator overflow-hidden animate-slide-down"
-              style={{ background: 'rgba(44,44,46,0.97)', backdropFilter: 'blur(20px)' }}
-            >
+            <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-macos-lg shadow-macos-lg border border-macos-separator overflow-hidden animate-slide-down surface-panel">
               {enabledAccounts.map((acc) => (
                 <button
                   key={acc.id}

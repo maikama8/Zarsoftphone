@@ -48,6 +48,28 @@ export interface CallHistory {
   accountId: string
 }
 
+// Messaging (SIP MESSAGE / RFC 3428) Types
+export type MessageDirection = 'incoming' | 'outgoing'
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'failed' | 'received'
+
+export interface ChatMessage {
+  id: string
+  peer: string            // remote number/uri — the conversation key
+  name?: string           // resolved contact name (if known)
+  direction: MessageDirection
+  body: string
+  status: MessageStatus
+  timestamp: number
+  read: boolean           // incoming messages start unread
+  accountId: string
+}
+
+export interface SendMessageResult {
+  ok: boolean
+  code?: number
+  error?: string
+}
+
 // Call State Types
 export type CallState = 'idle' | 'connecting' | 'ringing' | 'active' | 'held' | 'ended'
 
@@ -107,7 +129,15 @@ export interface ElectronAPI {
     
     getCallHistory: () => Promise<CallHistory[]>
     addCallHistory: (call: Omit<CallHistory, 'id'>) => Promise<string>
-    
+    deleteCallHistory: (id: string) => Promise<void>
+    clearCallHistory: () => Promise<void>
+
+    getMessages: () => Promise<ChatMessage[]>
+    addMessage: (message: ChatMessage) => Promise<string>
+    updateMessage: (id: string, patch: Partial<ChatMessage>) => Promise<void>
+    markConversationRead: (peer: string) => Promise<void>
+    deleteConversation: (peer: string) => Promise<void>
+
     getSettings: () => Promise<AppSettings>
     updateSettings: (settings: Partial<AppSettings>) => Promise<void>
   }
@@ -136,12 +166,14 @@ export interface ElectronAPI {
     mute: (accountId: string, muted: boolean) => Promise<void>
     hold: (accountId: string) => Promise<void>
     unhold: (accountId: string) => Promise<void>
+    sendMessage: (accountId: string, to: string, body: string) => Promise<SendMessageResult>
     onRegistered: (callback: (accountId: string) => void) => void
     onRegistrationFailed: (callback: (accountId: string, error: string) => void) => void
     onIncomingCall: (callback: (accountId: string, number: string, callId: string) => void) => void
     onCallState: (callback: (state: string) => void) => void
     onAuthRequired: (callback: (accountId: string) => void) => void
     onError: (callback: (accountId: string, error: string) => void) => void
+    onIncomingMessage: (callback: (accountId: string, from: string, body: string) => void) => void
   }
 
   // RTP media bridge

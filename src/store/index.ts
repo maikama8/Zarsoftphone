@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SipAccount, Contact, CallHistory, AppSettings, ActiveCall, AudioDevice } from '../types'
+import type { SipAccount, Contact, CallHistory, ChatMessage, AppSettings, ActiveCall, AudioDevice } from '../types'
 import { Invitation } from 'sip.js'
 
 interface AppState {
@@ -25,6 +25,16 @@ interface AppState {
   callHistory: CallHistory[]
   setCallHistory: (history: CallHistory[]) => void
   addCallHistory: (call: CallHistory) => void
+  removeCallHistory: (id: string) => void
+  clearCallHistory: () => void
+
+  // Messages
+  messages: ChatMessage[]
+  setMessages: (messages: ChatMessage[]) => void
+  addMessage: (message: ChatMessage) => void
+  updateMessage: (id: string, patch: Partial<ChatMessage>) => void
+  markConversationRead: (peer: string) => void
+  removeConversation: (peer: string) => void
 
   // Active Call
   activeCall: ActiveCall | null
@@ -94,6 +104,31 @@ export const useStore = create<AppState>((set) => ({
   setCallHistory: (callHistory) => set({ callHistory }),
   addCallHistory: (call) => set((state) => ({
     callHistory: [call, ...state.callHistory]
+  })),
+  removeCallHistory: (id) => set((state) => ({
+    callHistory: state.callHistory.filter((c) => c.id !== id)
+  })),
+  clearCallHistory: () => set({ callHistory: [] }),
+
+  // Messages
+  messages: [],
+  setMessages: (messages) => set({ messages }),
+  addMessage: (message) => set((state) => ({
+    // Replace an optimistic entry with the same id, else append.
+    messages: state.messages.some((m) => m.id === message.id)
+      ? state.messages.map((m) => (m.id === message.id ? message : m))
+      : [...state.messages, message],
+  })),
+  updateMessage: (id, patch) => set((state) => ({
+    messages: state.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+  })),
+  markConversationRead: (peer) => set((state) => ({
+    messages: state.messages.map((m) =>
+      m.peer === peer && m.direction === 'incoming' && !m.read ? { ...m, read: true } : m
+    ),
+  })),
+  removeConversation: (peer) => set((state) => ({
+    messages: state.messages.filter((m) => m.peer !== peer),
   })),
 
   // Active Call

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { X, Power, Trash2, Edit } from 'lucide-react'
+import { X, Power, Trash2, Edit, Monitor, Sun, Moon } from 'lucide-react'
 import { useStore } from '../store'
 import { sipService } from '../services/sip/SipService'
+import { getThemePref, applyTheme, type ThemePref } from '../theme'
 import clsx from 'clsx'
 
 export default function CompactSettings() {
@@ -15,6 +16,12 @@ export default function CompactSettings() {
   const setEditingAccountId = useStore((s) => s.setEditingAccountId)
 
   const [tab, setTab] = useState<'accounts' | 'audio' | 'general'>('accounts')
+  const [theme, setTheme] = useState<ThemePref>(getThemePref())
+
+  const changeTheme = (pref: ThemePref) => {
+    applyTheme(pref)
+    setTheme(pref)
+  }
 
   const handleToggleAccount = async (acc: typeof accounts[0]) => {
     const newEnabled = !acc.isEnabled
@@ -44,9 +51,7 @@ export default function CompactSettings() {
     <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in">
       <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setShowSettingsModal(false)} />
 
-      <div className="relative w-80 max-h-[500px] flex flex-col rounded-macos-lg border border-macos-separator shadow-macos-xl animate-scale-in"
-        style={{ background: 'rgba(36,36,38,0.98)', backdropFilter: 'blur(30px)' }}
-      >
+      <div className="relative w-80 max-h-[500px] flex flex-col rounded-macos-lg border border-macos-separator shadow-macos-xl animate-scale-in surface-panel">
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-macos-separator flex-shrink-0">
           <span className="text-sm font-semibold text-macos-text-primary">Settings</span>
@@ -161,6 +166,31 @@ export default function CompactSettings() {
 
           {tab === 'general' && (
             <div className="p-3 space-y-2">
+              <div>
+                <div className="text-[10px] text-macos-text-tertiary mb-1.5 uppercase tracking-wide">Appearance</div>
+                <div className="grid grid-cols-3 gap-1 p-1 rounded-macos bg-macos-bg-tertiary/60">
+                  {([
+                    { key: 'system', label: 'System', Icon: Monitor },
+                    { key: 'light', label: 'Light', Icon: Sun },
+                    { key: 'dark', label: 'Dark', Icon: Moon },
+                  ] as const).map(({ key, label, Icon }) => (
+                    <button
+                      key={key}
+                      onClick={() => changeTheme(key)}
+                      className={clsx(
+                        'flex flex-col items-center gap-1 py-1.5 rounded transition-all',
+                        theme === key
+                          ? 'brand-gradient text-white shadow-brand-sm'
+                          : 'text-macos-text-tertiary hover:text-macos-text-primary hover:bg-macos-bg-tertiary'
+                      )}
+                    >
+                      <Icon size={15} />
+                      <span className="text-[10px] font-medium">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="border-t border-macos-separator pt-2 space-y-2">
               {([
                 { key: 'minimizeToTray', label: 'Minimize to tray' },
                 { key: 'autoAnswer', label: 'Auto-answer calls' },
@@ -179,6 +209,7 @@ export default function CompactSettings() {
                   onChange={(v) => updateSettings({ notifications: { ...settings.notifications, enabled: v } })}
                 />
               </SettingRow>
+              </div>
             </div>
           )}
         </div>

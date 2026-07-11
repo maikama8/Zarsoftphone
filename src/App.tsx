@@ -7,9 +7,12 @@ import TitleBar from './components/TitleBar'
 import Dialer from './pages/Dialer'
 import CompactContacts from './components/CompactContacts'
 import CompactHistory from './components/CompactHistory'
+import CompactMessages from './components/CompactMessages'
 import IncomingCallModal from './components/IncomingCallModal'
 import AddAccountModal from './components/AddAccountModal'
 import CompactSettings from './components/CompactSettings'
+import { initThemeListener } from './theme'
+import { v4 as uuidv4 } from 'uuid'
 import clsx from 'clsx'
 
 type Panel = 'contacts' | 'history' | 'messages' | null
@@ -18,6 +21,8 @@ export default function App() {
   const setAccounts = useStore((s) => s.setAccounts)
   const setContacts = useStore((s) => s.setContacts)
   const setCallHistory = useStore((s) => s.setCallHistory)
+  const setMessages = useStore((s) => s.setMessages)
+  const unreadMessages = useStore((s) => s.messages.filter((m) => m.direction === 'incoming' && !m.read).length)
   const setSettings = useStore((s) => s.setSettings)
   const updateAccount = useStore((s) => s.updateAccount)
   const setIncomingCall = useStore((s) => s.setIncomingCall)
@@ -33,20 +38,27 @@ export default function App() {
     // Listen for navigation-to-dialer requests (e.g. from history click-to-call).
     const onNavigateDialer = () => setActivePanel(null)
     window.addEventListener('navigate-dialer', onNavigateDialer as EventListener)
-    return () => window.removeEventListener('navigate-dialer', onNavigateDialer as EventListener)
+    // Keep the theme in sync with the OS while in "system" mode.
+    const cleanupTheme = initThemeListener()
+    return () => {
+      window.removeEventListener('navigate-dialer', onNavigateDialer as EventListener)
+      cleanupTheme()
+    }
   }, [])
 
   useEffect(() => {
     const loadData = async () => {
-      const [accounts, contacts, history, settings] = await Promise.all([
+      const [accounts, contacts, history, messages, settings] = await Promise.all([
         window.electronAPI.db.getAccounts(),
         window.electronAPI.db.getContacts(),
         window.electronAPI.db.getCallHistory(),
+        window.electronAPI.db.getMessages(),
         window.electronAPI.db.getSettings(),
       ])
       setAccounts(accounts)
       setContacts(contacts)
       setCallHistory(history)
+      setMessages(messages)
       setSettings(settings)
 
       for (const account of accounts) {
@@ -113,6 +125,24 @@ export default function App() {
       window.electronAPI.notifications.show('Incoming Call', `Call from ${remoteNumber}`)
     })
 
+    window.electronAPI.sipNative.onIncomingMessage((accountId, from, body) => {
+      const contact = useStore.getState().contacts.find((c) => c.sipNumber === from)
+      const msg = {
+        id: uuidv4(),
+        peer: from,
+        name: contact?.name,
+        direction: 'incoming' as const,
+        body,
+        status: 'received' as const,
+        timestamp: Date.now(),
+        read: false,
+        accountId,
+      }
+      useStore.getState().addMessage(msg)
+      window.electronAPI.db.addMessage(msg).catch((e) => console.error('Failed to save message:', e))
+      window.electronAPI.notifications.show(`Message from ${contact?.name || from}`, body)
+    })
+
     window.electronAPI.sipNative.onCallState((state) => {
       console.log(`Native SIP: Call state ${state}`)
       if (state === 'active') {
@@ -176,46 +206,36 @@ export default function App() {
         {activePanel === null && <Dialer />}
         {activePanel === 'contacts' && <CompactContacts />}
         {activePanel === 'history'  && <CompactHistory />}
-        {activePanel === 'messages' && (
-          <div className="flex-1 flex items-center justify-center text-xs text-macos-text-quaternary">
-            Messages — coming soon
-          </div>
-        )}
+        {activePanel === 'messages' && <CompactMessages />}
       </div>
 
       {/* Bottom nav — always visible */}
-      <div
-        className="flex flex-shrink-0 border-t border-macos-separator"
-        style={{ background: 'rgba(28,28,30,0.95)' }}
-      >
-        {/* Dialer tab — returns to the dialpad (no panel active) */}
-        <button
-          onClick={goDialer}
-          className={clsx(
-            'flex-1 flex flex-col items-center justify-center py-1.5 gap-0.5 transition-colors',
-            activePanel === null
-              ? 'text-macos-accent-blue'
-              : 'text-macos-text-quaternary hover:text-macos-text-tertiary'
-          )}
-        >
-          <Phone size={15} />
-          <span className="text-[9px] leading-none">Dialer</span>
-        </button>
-        {navItems.map(({ id, icon: Icon, label }) => {
+      <div className="flex flex-shrink-0 items-center gap-1 px-1.5 py-1.5 border-t border-macos-separator surface-bar">
+        {[{ id: null as Panel, icon: Phone, label: 'Dialer' }, ...navItems].map(({ id, icon: Icon, label }) => {
           const isActive = activePanel === id
           return (
             <button
-              key={id}
-              onClick={() => togglePanel(id)}
+              key={label}
+              onClick={() => (id === null ? goDialer() : togglePanel(id))}
               className={clsx(
-                'flex-1 flex flex-col items-center justify-center py-1.5 gap-0.5 transition-colors',
+                'nav-item rounded-macos-lg',
                 isActive
-                  ? 'text-macos-accent-blue'
-                  : 'text-macos-text-quaternary hover:text-macos-text-tertiary'
+                  ? 'text-white brand-gradient shadow-brand-sm'
+                  : 'text-macos-text-quaternary hover:text-macos-text-secondary hover:bg-macos-bg-tertiary/60'
               )}
             >
-              <Icon size={15} />
-              <span className="text-[9px] leading-none">{label}</span>
+              <div className="relative">
+                <Icon size={16} strokeWidth={isActive ? 2.4 : 2} />
+                {id === 'messages' && unreadMessages > 0 && (
+                  <span className={clsx(
+                    'absolute -top-1.5 -right-2 min-w-[14px] h-[14px] px-1 rounded-full flex items-center justify-center text-[8px] font-bold leading-none',
+                    isActive ? 'bg-white text-macos-accent-blue' : 'bg-macos-accent-red text-white'
+                  )}>
+                    {unreadMessages > 99 ? '99+' : unreadMessages}
+                  </span>
+                )}
+              </div>
+              <span className="text-[9px] font-medium leading-none">{label}</span>
             </button>
           )
         })}

@@ -12,6 +12,13 @@ import {
   deleteContact,
   getCallHistory,
   addCallHistory,
+  deleteCallHistory,
+  clearCallHistory,
+  getMessages,
+  addMessage,
+  updateMessage,
+  markConversationRead,
+  deleteConversation,
   getSettings,
   updateSettings
 } from './database'
@@ -255,6 +262,11 @@ app.whenReady().then(() => {
     sendToRenderer('sip:incomingCall', accountId, number, callId)
   })
 
+  nativeSipService.on('incomingMessage', (accountId: string, from: string, body: string) => {
+    console.log(`[Main] Incoming message from ${from}`)
+    sendToRenderer('sip:incomingMessage', accountId, from, body)
+  })
+
   nativeSipService.on('callState', (state: string) => {
     console.log(`[Main] Call state: ${state}`)
     sendToRenderer('sip:callState', state)
@@ -301,6 +313,13 @@ ipcMain.handle('db:deleteContact', (_event, id) => deleteContact(id))
 
 ipcMain.handle('db:getCallHistory', () => getCallHistory())
 ipcMain.handle('db:addCallHistory', (_event, call) => addCallHistory(call))
+ipcMain.handle('db:deleteCallHistory', (_event, id) => deleteCallHistory(id))
+ipcMain.handle('db:clearCallHistory', () => clearCallHistory())
+ipcMain.handle('db:getMessages', () => getMessages())
+ipcMain.handle('db:addMessage', (_event, message) => addMessage(message))
+ipcMain.handle('db:updateMessage', (_event, id, patch) => updateMessage(id, patch))
+ipcMain.handle('db:markConversationRead', (_event, peer) => markConversationRead(peer))
+ipcMain.handle('db:deleteConversation', (_event, peer) => deleteConversation(peer))
 
 ipcMain.handle('db:getSettings', () => getSettings())
 ipcMain.handle('db:updateSettings', (_event, settings) => updateSettings(settings))
@@ -352,6 +371,11 @@ ipcMain.handle('sip:call-native', async (_event, accountId, targetNumber) => {
 ipcMain.handle('sip:hangup-native', async (_event, accountId) => {
   if (!nativeSipService) return
   await nativeSipService.hangup(accountId)
+})
+
+ipcMain.handle('sip:message-native', async (_event, accountId, to, body) => {
+  if (!nativeSipService) return { ok: false, error: 'SIP service unavailable' }
+  return await nativeSipService.sendMessage(accountId, to, body)
 })
 
 ipcMain.handle('sip:answer-native', async (_event, accountId, callId) => {

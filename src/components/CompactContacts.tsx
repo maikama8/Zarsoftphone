@@ -138,9 +138,7 @@ export default function CompactContacts() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in">
           <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setShowModal(false)} />
-          <div className="relative w-64 rounded-macos-lg border border-macos-separator shadow-macos-xl animate-scale-in"
-            style={{ background: 'rgba(36,36,38,0.98)', backdropFilter: 'blur(30px)' }}
-          >
+          <div className="relative w-64 rounded-macos-lg border border-macos-separator shadow-macos-xl animate-scale-in surface-panel">
             <div className="flex items-center justify-between px-3 py-2 border-b border-macos-separator">
               <span className="text-xs font-semibold text-macos-text-primary">
                 {editing ? 'Edit Contact' : 'Add Contact'}

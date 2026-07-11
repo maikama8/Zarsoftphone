@@ -72,6 +72,8 @@ export class NativeSipService extends EventEmitter {
   private accounts: Map<string, AccountContext> = new Map()
   private registering: Set<string> = new Set()
   private calls: Map<string, CallContext> = new Map()
+  // Per-account CSeq counter for out-of-dialog MESSAGE requests.
+  private messageCSeq: Map<string, number> = new Map()
   // Active call id per account (for IPC handlers that take accountId).
   private activeCallByAccount: Map<string, string> = new Map()
   // Push audio frames to renderer.
@@ -387,6 +389,99 @@ export class NativeSipService extends EventEmitter {
         }
       },
     })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Outbound instant message (RFC 3428)
+  // ---------------------------------------------------------------------------
+
+  async sendMessage(accountId: string, to: string, body: string): Promise<{ ok: boolean; code?: number; error?: string }> {
+    const ctx = this.accounts.get(accountId)
+    if (!ctx || !ctx.registered) return { ok: false, error: 'Account not registered' }
+    const target = this.normalizeUri(to, ctx.account.domain)
+    return new Promise((resolve) => this.sendMessageAttempt(ctx, target, body, false, resolve))
+  }
+
+  private sendMessageAttempt(
+    ctx: AccountContext,
+    target: string,
+    body: string,
+    isRetry: boolean,
+    resolve: (r: { ok: boolean; code?: number; error?: string }) => void,
+  ): void {
+    const account = ctx.account
+    const branch = this.generateBranch()
+    const localIp = ctx.transport.localAddress
+    const localPort = ctx.transport.localPort
+    const cseq = (this.messageCSeq.get(account.id) ?? 0) + 1
+    this.messageCSeq.set(account.id, cseq)
+    const bodyBytes = Buffer.byteLength(body, 'utf8')
+
+    let raw =
+      `MESSAGE ${target} SIP/2.0\r\n` +
+      `Via: SIP/2.0/${account.transport} ${localIp}:${localPort};branch=${branch};rport\r\n` +
+      `Max-Forwards: 70\r\n` +
+      `From: <sip:${account.username}@${account.domain}>;tag=${this.generateTag()}\r\n` +
+      `To: <${target}>\r\n` +
+      `Call-ID: ${this.generateCallId()}\r\n` +
+      `CSeq: ${cseq} MESSAGE\r\n` +
+      `User-Agent: Zarsip/1.0\r\n`
+
+    raw += this.authHeaderFromCache(ctx, 'MESSAGE', target)
+
+    raw +=
+      `Content-Type: text/plain; charset=UTF-8\r\n` +
+      `Content-Length: ${bodyBytes}\r\n\r\n` +
+      body
+
+    ctx.txLayer.sendClientTransaction({
+      branch, method: 'MESSAGE', raw,
+      send: (r) => ctx.transport.send(r),
+      isInvite: false,
+      onFinal: (resp) => {
+        const code = resp.statusCode || 0
+        if ((code === 401 || code === 407) && !isRetry) {
+          const authHdr = getHeader(resp, code === 401 ? 'WWW-Authenticate' : 'Proxy-Authenticate')
+          const challenge = authHdr ? parseChallenge(authHdr) : null
+          if (challenge) {
+            const existing = ctx.auth.get(challenge.realm)
+            const authCtx = contextFromChallenge(account.authUser || account.username, account.password, challenge, existing)
+            ctx.auth.set(challenge.realm, authCtx)
+            this.sendMessageAttempt(ctx, target, body, true, resolve)
+            return
+          }
+        }
+        if (code >= 200 && code < 300) resolve({ ok: true, code })
+        else resolve({ ok: false, code, error: resp.reasonPhrase || `SIP ${code || 'timeout'}` })
+      },
+    })
+  }
+
+  // Build an Authorization header from the account's cached digest context, so a
+  // MESSAGE can often skip the 401 round-trip (nonce reuse with incremented nc).
+  private authHeaderFromCache(ctx: AccountContext, method: string, uri: string): string {
+    const authCtx = ctx.auth.values().next().value as AuthContext | undefined
+    if (!authCtx) return ''
+    const challenge = {
+      scheme: 'Digest',
+      realm: authCtx.realm,
+      nonce: authCtx.nonce,
+      algorithm: authCtx.algorithm,
+      qop: authCtx.qop ? [authCtx.qop] : undefined,
+      opaque: authCtx.opaque,
+      stale: false,
+      params: {},
+    }
+    incrementNc(authCtx)
+    return buildAuthorization({ method, uri, challenge, context: authCtx, isProxy: false })
+  }
+
+  // Normalize a user-entered target into a SIP URI.
+  private normalizeUri(to: string, domain: string): string {
+    const t = to.trim()
+    if (t.startsWith('sip:') || t.startsWith('sips:')) return t
+    if (t.includes('@')) return `sip:${t}`
+    return `sip:${t}@${domain}`
   }
 
   // ---------------------------------------------------------------------------
@@ -1000,6 +1095,22 @@ export class NativeSipService extends EventEmitter {
     if (method === 'OPTIONS') {
       const resp = this.buildSimpleResponse(msg, 200, 'OK', ctx)
       ctx.transport.send(resp)
+      return
+    }
+
+    if (method === 'MESSAGE') {
+      // RFC 3428 — instant message. Acknowledge, then surface text bodies.
+      const resp = this.buildSimpleResponse(msg, 200, 'OK', ctx)
+      ctx.transport.send(resp)
+      ctx.txLayer.rememberServerResponse(branch, 'MESSAGE', resp, false)
+
+      const contentType = getHeader(msg, 'Content-Type') || 'text/plain'
+      const body = msg.body || ''
+      // Ignore non-text payloads (e.g. application/im-iscomposing+xml typing hints).
+      if (/text\/(plain|html)/i.test(contentType) && body.trim()) {
+        const from = this.extractNumber(getHeader(msg, 'From') || '')
+        this.emit('incomingMessage', account.id, from, body)
+      }
       return
     }
   }

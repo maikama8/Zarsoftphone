@@ -16,6 +16,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     
     getCallHistory: () => ipcRenderer.invoke('db:getCallHistory'),
     addCallHistory: (call: any) => ipcRenderer.invoke('db:addCallHistory', call),
+    deleteCallHistory: (id: string) => ipcRenderer.invoke('db:deleteCallHistory', id),
+    clearCallHistory: () => ipcRenderer.invoke('db:clearCallHistory'),
+
+    getMessages: () => ipcRenderer.invoke('db:getMessages'),
+    addMessage: (message: any) => ipcRenderer.invoke('db:addMessage', message),
+    updateMessage: (id: string, patch: any) => ipcRenderer.invoke('db:updateMessage', id, patch),
+    markConversationRead: (peer: string) => ipcRenderer.invoke('db:markConversationRead', peer),
+    deleteConversation: (peer: string) => ipcRenderer.invoke('db:deleteConversation', peer),
     
     getSettings: () => ipcRenderer.invoke('db:getSettings'),
     updateSettings: (settings: any) => ipcRenderer.invoke('db:updateSettings', settings),
@@ -45,6 +53,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     mute: (accountId: string, muted: boolean) => ipcRenderer.invoke('sip:mute-native', accountId, muted),
     hold: (accountId: string) => ipcRenderer.invoke('sip:hold-native', accountId),
     unhold: (accountId: string) => ipcRenderer.invoke('sip:unhold-native', accountId),
+    sendMessage: (accountId: string, to: string, body: string) =>
+      ipcRenderer.invoke('sip:message-native', accountId, to, body),
 
     // Event listeners
     onRegistered: (callback: (accountId: string) => void) => {
@@ -64,6 +74,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     onError: (callback: (accountId: string, error: string) => void) => {
       ipcRenderer.on('sip:error', (_event, accountId, error) => callback(accountId, error))
+    },
+    onIncomingMessage: (callback: (accountId: string, from: string, body: string) => void) => {
+      ipcRenderer.on('sip:incomingMessage', (_event, accountId, from, body) => callback(accountId, from, body))
     },
   },
 

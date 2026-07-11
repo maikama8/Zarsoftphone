@@ -2,6 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme variables ─────────────────────────────────────────────────────────
+   Values are space-separated RGB channels so Tailwind's `rgb(var(--x) / a)`
+   and opacity modifiers work. :root = light, .dark = dark.                     */
+:root {
+  --bg-primary: 240 242 247;
+  --bg-secondary: 255 255 255;
+  --bg-tertiary: 232 235 242;
+  --bg-elevated: 255 255 255;
+
+  --text-primary: 17 24 39;
+  --text-secondary: 51 65 85;
+  --text-tertiary: 100 116 139;
+  --text-quaternary: 148 163 184;
+
+  --accent-blue: 10 122 255;
+  --accent-green: 40 190 90;
+  --accent-red: 255 59 48;
+  --accent-orange: 255 149 0;
+  --accent-yellow: 245 190 20;
+
+  --separator: 224 230 238;
+
+  --brand-light: 51 148 255;
+  --brand: 10 132 255;
+  --brand-dark: 0 81 213;
+
+  /* Elevated/bar surface tints (used with backdrop blur) */
+  --bar-alpha: 0.72;
+  --scrollbar: 15 23 42;
+  --scrollbar-alpha: 0.18;
+}
+
+.dark {
+  --bg-primary: 13 15 20;
+  --bg-secondary: 22 25 33;
+  --bg-tertiary: 34 39 50;
+  --bg-elevated: 26 30 40;
+
+  --text-primary: 255 255 255;
+  --text-secondary: 210 217 232;
+  --text-tertiary: 148 163 184;
+  --text-quaternary: 100 116 139;
+
+  --accent-blue: 10 132 255;
+  --accent-green: 48 209 88;
+  --accent-red: 255 69 58;
+  --accent-orange: 255 159 10;
+  --accent-yellow: 255 214 10;
+
+  --separator: 40 46 58;
+
+  --brand-light: 51 148 255;
+  --brand: 10 132 255;
+  --brand-dark: 0 81 213;
+
+  --bar-alpha: 0.78;
+  --scrollbar: 255 255 255;
+  --scrollbar-alpha: 0.16;
+}
+
 @layer base {
   * {
     @apply border-macos-separator;
@@ -21,93 +81,118 @@
     height: 100vh;
     overflow: hidden;
   }
+
+  html, body {
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+}
+
+@layer components {
+  /* Theme-aware surfaces (replace hard-coded rgba backgrounds) */
+  .surface-bar {
+    background: rgb(var(--bg-secondary) / var(--bar-alpha));
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+  }
+  .surface-panel {
+    background: rgb(var(--bg-elevated) / 0.98);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+  }
+  .surface-sunken {
+    background: rgb(var(--bg-primary) / 0.5);
+  }
+
+  /* Brand gradient helpers */
+  .brand-gradient {
+    background-image: linear-gradient(135deg, rgb(var(--brand-light)), rgb(var(--brand-dark)));
+  }
+  .brand-gradient-green {
+    background-image: linear-gradient(135deg, rgb(var(--accent-green)), rgb(var(--accent-green) / 0.75));
+  }
+  .brand-text {
+    background: linear-gradient(135deg, rgb(var(--brand-light)), rgb(var(--brand-dark)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Card surface */
+  .card {
+    @apply rounded-macos-lg border border-macos-separator bg-macos-bg-secondary;
+  }
+
+  /* Circular dialpad key (modern blue) */
+  .dialpad-key {
+    @apply relative flex flex-col items-center justify-center rounded-full select-none;
+    @apply transition-all duration-100 ease-out;
+    background: rgb(var(--bg-tertiary) / 0.55);
+  }
+  .dialpad-key:hover {
+    background: rgb(var(--brand) / 0.14);
+  }
+  .dialpad-key:active {
+    background: rgb(var(--brand) / 0.24);
+    transform: scale(0.94);
+  }
+
+  /* Bottom-nav pill */
+  .nav-item {
+    @apply relative flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5;
+    @apply transition-colors duration-150;
+  }
 }
 
 @layer utilities {
   /* Electron drag regions */
-  .app-drag {
-    -webkit-app-region: drag;
-    user-select: none;
-  }
-  .app-no-drag {
-    -webkit-app-region: no-drag;
-  }
+  .app-drag { -webkit-app-region: drag; user-select: none; }
+  .app-no-drag { -webkit-app-region: no-drag; }
 
-  /* Glass effects */
+  /* Glass effects (kept for back-compat) */
   .glass-effect {
-    background: rgba(28, 28, 30, 0.7);
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
-  }
-
-  .glass-effect-light {
-    background: rgba(44, 44, 46, 0.5);
+    background: rgb(var(--bg-secondary) / 0.7);
     backdrop-filter: blur(40px) saturate(180%);
     -webkit-backdrop-filter: blur(40px) saturate(180%);
   }
 
   /* Thin scrollbar for compact lists */
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
+  .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 2px;
+    background: rgb(var(--scrollbar) / var(--scrollbar-alpha));
+    border-radius: 3px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: rgb(var(--scrollbar) / calc(var(--scrollbar-alpha) + 0.1));
   }
 
   /* Compact input used across all modals/panels */
   .compact-input {
-    @apply bg-macos-bg-tertiary text-macos-text-primary rounded border border-macos-separator;
-    @apply focus:outline-none focus:ring-1 focus:ring-macos-accent-blue focus:border-transparent;
+    @apply bg-macos-bg-tertiary text-macos-text-primary rounded-macos border border-macos-separator;
+    @apply focus:outline-none focus:ring-2 focus:ring-macos-accent-blue/50 focus:border-transparent;
     @apply transition-all duration-150;
     font-size: 11px;
-    padding: 4px 8px;
+    padding: 5px 9px;
   }
 
-  select.compact-input {
-    /* native appearance for selects */
-    appearance: auto;
-    -webkit-appearance: auto;
-  }
+  select.compact-input { appearance: auto; -webkit-appearance: auto; }
 
   /* Legacy card / button utilities still used in Settings/Accounts pages */
   .card-macos {
-    @apply bg-macos-bg-secondary rounded-macos p-3;
-    @apply border border-macos-separator;
+    @apply bg-macos-bg-secondary rounded-macos-lg p-3 border border-macos-separator;
   }
-
   .btn-macos {
     @apply px-3 py-1.5 rounded-macos font-medium transition-all duration-150 text-sm;
     @apply hover:scale-[1.01] active:scale-[0.99];
   }
-
-  .btn-primary {
-    @apply btn-macos bg-macos-accent-blue text-white hover:bg-opacity-90;
-  }
-
-  .btn-secondary {
-    @apply btn-macos bg-macos-bg-tertiary text-macos-text-primary hover:bg-opacity-80;
-  }
-
-  .btn-danger {
-    @apply btn-macos bg-macos-accent-red text-white hover:bg-opacity-90;
-  }
-
-  .btn-success {
-    @apply btn-macos bg-macos-accent-green text-white hover:bg-opacity-90;
-  }
-
+  .btn-primary { @apply btn-macos brand-gradient text-white shadow-brand-sm; }
+  .btn-secondary { @apply btn-macos bg-macos-bg-tertiary text-macos-text-primary hover:bg-opacity-80; }
+  .btn-danger { @apply btn-macos bg-macos-accent-red text-white hover:bg-opacity-90; }
+  .btn-success { @apply btn-macos bg-macos-accent-green text-white hover:bg-opacity-90; }
   .input-macos {
     @apply bg-macos-bg-tertiary text-macos-text-primary text-sm;
     @apply border border-macos-separator rounded-macos px-3 py-1.5;
-    @apply focus:outline-none focus:ring-1 focus:ring-macos-accent-blue focus:border-transparent;
+    @apply focus:outline-none focus:ring-2 focus:ring-macos-accent-blue/50 focus:border-transparent;
     @apply transition-all duration-150;
   }
 }

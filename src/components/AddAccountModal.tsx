@@ -126,9 +126,7 @@ export default function AddAccountModal() {
         onClick={handleClose}
       />
 
-      <div className="relative w-72 rounded-macos-lg border border-macos-separator shadow-macos-xl animate-scale-in"
-        style={{ background: 'rgba(36,36,38,0.98)', backdropFilter: 'blur(30px)' }}
-      >
+      <div className="relative w-72 rounded-macos-lg border border-macos-separator shadow-macos-xl animate-scale-in surface-panel">
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-macos-separator">
           <span className="text-sm font-semibold text-macos-text-primary">

@@ -54,6 +54,18 @@ export function initDatabase() {
       account_id TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      peer TEXT NOT NULL,
+      name TEXT,
+      direction TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      is_read INTEGER DEFAULT 0,
+      account_id TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -321,8 +333,74 @@ export function addCallHistory(call: any) {
     call.timestamp,
     call.accountId
   )
-  
+
   return id
+}
+
+export function deleteCallHistory(id: string) {
+  db.prepare('DELETE FROM call_history WHERE id = ?').run(id)
+}
+
+export function clearCallHistory() {
+  db.prepare('DELETE FROM call_history').run()
+}
+
+// Message operations (SIP MESSAGE / instant messaging)
+export function getMessages() {
+  const rows = db.prepare('SELECT * FROM messages ORDER BY timestamp ASC LIMIT 2000').all() as any[]
+  return rows.map(m => ({
+    id: m.id,
+    peer: m.peer,
+    name: m.name || undefined,
+    direction: m.direction,
+    body: m.body,
+    status: m.status,
+    timestamp: m.timestamp,
+    read: !!m.is_read,
+    accountId: m.account_id,
+  }))
+}
+
+export function addMessage(message: any) {
+  const id = message.id || uuidv4()
+  db.prepare(`
+    INSERT OR REPLACE INTO messages (id, peer, name, direction, body, status, timestamp, is_read, account_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    message.peer,
+    message.name || null,
+    message.direction,
+    message.body,
+    message.status,
+    message.timestamp,
+    message.read ? 1 : 0,
+    message.accountId || null,
+  )
+  return id
+}
+
+export function updateMessage(id: string, patch: any) {
+  const allowed: Record<string, string> = { status: 'status', body: 'body', name: 'name', read: 'is_read' }
+  const sets: string[] = []
+  const values: any[] = []
+  for (const [key, col] of Object.entries(allowed)) {
+    if (patch[key] !== undefined) {
+      sets.push(`${col} = ?`)
+      values.push(key === 'read' ? (patch[key] ? 1 : 0) : patch[key])
+    }
+  }
+  if (!sets.length) return
+  values.push(id)
+  db.prepare(`UPDATE messages SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+}
+
+export function markConversationRead(peer: string) {
+  db.prepare('UPDATE messages SET is_read = 1 WHERE peer = ? AND direction = ?').run(peer, 'incoming')
+}
+
+export function deleteConversation(peer: string) {
+  db.prepare('DELETE FROM messages WHERE peer = ?').run(peer)
 }
 
 // Settings operations

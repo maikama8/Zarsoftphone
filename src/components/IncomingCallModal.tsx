@@ -90,10 +90,7 @@ export default function IncomingCallModal() {
   return (
     /* Compact notification banner at the bottom of the window */
     <div className="absolute bottom-0 left-0 right-0 z-50 p-2 animate-slide-up">
-      <div
-        className="flex items-center gap-2 rounded-macos px-3 py-2 shadow-macos-lg border border-macos-separator"
-        style={{ background: 'rgba(36,36,38,0.97)', backdropFilter: 'blur(20px)' }}
-      >
+      <div className="flex items-center gap-2 rounded-macos-lg px-3 py-2 shadow-macos-lg border border-macos-separator surface-panel">
         {/* Pulsing avatar */}
         <div className="relative flex-shrink-0">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-macos-accent-blue to-blue-700 flex items-center justify-center">
